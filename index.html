@@ -852,9 +852,14 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <div style="margin-bottom:9px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">📸 進場截圖</div>
       <div class="img-grid-preview" id="e-img-entry-preview" style="margin-bottom:6px"></div>
-      <div class="img-upload-area" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleEditImgDrop(event,'entry')" style="padding:10px;min-height:60px">
+      <div class="img-upload-area" id="e-upload-entry"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleEditImgDrop(event,'entry')"
+        onclick="editActiveZone='entry'"
+        style="padding:10px;min-height:60px">
         <input type="file" id="e-img-entry-input" accept="image/*" multiple onchange="handleEditImgFiles(this.files,'entry')">
-        <div class="img-upload-hint" style="font-size:11px"><span style="font-size:14px">＋</span> 新增進場截圖</div>
+        <div class="img-upload-hint" style="font-size:11px"><span style="font-size:14px">＋</span> 新增進場截圖（或 Ctrl+V 貼上）</div>
       </div>
     </div>
 
@@ -862,9 +867,14 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <div style="margin-bottom:9px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">📸 出場截圖</div>
       <div class="img-grid-preview" id="e-img-exit-preview" style="margin-bottom:6px"></div>
-      <div class="img-upload-area" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleEditImgDrop(event,'exit')" style="padding:10px;min-height:60px">
+      <div class="img-upload-area" id="e-upload-exit"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleEditImgDrop(event,'exit')"
+        onclick="editActiveZone='exit'"
+        style="padding:10px;min-height:60px">
         <input type="file" id="e-img-exit-input" accept="image/*" multiple onchange="handleEditImgFiles(this.files,'exit')">
-        <div class="img-upload-hint" style="font-size:11px"><span style="font-size:14px">＋</span> 新增出場截圖</div>
+        <div class="img-upload-hint" style="font-size:11px"><span style="font-size:14px">＋</span> 新增出場截圖（或 Ctrl+V 貼上）</div>
       </div>
     </div>
 
@@ -1600,6 +1610,7 @@ function lbReset(){
 // ===== EDIT TRADE =====
 let editingId = null;
 let editImgEntry=[], editImgExit=[];
+let editActiveZone='entry'; // tracks which upload zone was last clicked
 
 function renderEditImgPreview(type){
   const imgs=type==='entry'?editImgEntry:editImgExit;
@@ -1640,6 +1651,7 @@ function openEditModal(id){
   editingId=id;
   editImgEntry=(t.images||[]).slice();
   editImgExit=(t.exitImages||[]).slice();
+  editActiveZone='entry'; // default to entry zone
   const set=(el,v)=>{const e=document.getElementById(el);if(e)e.value=v||'';};
   set('e-date',t.date);
   document.getElementById('e-exchange').value=t.exchange||'OKX';
@@ -2453,7 +2465,11 @@ document.getElementById('edit-modal').addEventListener('paste',function(e){
   const items=Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
   if(!items.length)return;
   e.stopPropagation();
-  handleEditImgFiles(items.map(i=>i.getAsFile()).filter(Boolean),'entry');
+  // Route to whichever zone was last clicked (default: entry)
+  handleEditImgFiles(items.map(i=>i.getAsFile()).filter(Boolean), editActiveZone);
+  // Visual feedback - briefly highlight active zone
+  const zone=document.getElementById('e-upload-'+editActiveZone);
+  if(zone){zone.style.borderColor='var(--accent)';setTimeout(()=>zone.style.borderColor='',1000);}
 });
 document.getElementById('exit-modal').addEventListener('click',function(e){if(e.target===this)closeExitModal();});
 // Dedicated paste listener for exit modal — catches Ctrl+V regardless of focus
