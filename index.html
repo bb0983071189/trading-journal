@@ -856,7 +856,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         ondragover="event.preventDefault();this.classList.add('drag')"
         ondragleave="this.classList.remove('drag')"
         ondrop="handleEditImgDrop(event,'entry')"
-        onclick="editActiveZone='entry'"
+        onmouseenter="editActiveZone='entry'"
+        ontouchstart="editActiveZone='entry'"
         style="padding:10px;min-height:60px">
         <input type="file" id="e-img-entry-input" accept="image/*" multiple onchange="handleEditImgFiles(this.files,'entry')">
         <div class="img-upload-hint" style="font-size:11px"><span style="font-size:14px">＋</span> 新增進場截圖（或 Ctrl+V 貼上）</div>
@@ -871,7 +872,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         ondragover="event.preventDefault();this.classList.add('drag')"
         ondragleave="this.classList.remove('drag')"
         ondrop="handleEditImgDrop(event,'exit')"
-        onclick="editActiveZone='exit'"
+        onmouseenter="editActiveZone='exit'"
+        ontouchstart="editActiveZone='exit'"
         style="padding:10px;min-height:60px">
         <input type="file" id="e-img-exit-input" accept="image/*" multiple onchange="handleEditImgFiles(this.files,'exit')">
         <div class="img-upload-hint" style="font-size:11px"><span style="font-size:14px">＋</span> 新增出場截圖（或 Ctrl+V 貼上）</div>
@@ -2465,11 +2467,28 @@ document.getElementById('edit-modal').addEventListener('paste',function(e){
   const items=Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
   if(!items.length)return;
   e.stopPropagation();
-  // Route to whichever zone was last clicked (default: entry)
   handleEditImgFiles(items.map(i=>i.getAsFile()).filter(Boolean), editActiveZone);
-  // Visual feedback - briefly highlight active zone
+  // Visual feedback
   const zone=document.getElementById('e-upload-'+editActiveZone);
-  if(zone){zone.style.borderColor='var(--accent)';setTimeout(()=>zone.style.borderColor='',1000);}
+  if(zone){
+    zone.style.borderColor='var(--accent)';
+    zone.style.background='var(--accent-bg)';
+    setTimeout(()=>{zone.style.borderColor='';zone.style.background='';},800);
+  }
+});
+// Update active zone label when hovering
+document.getElementById('edit-modal').addEventListener('mouseover',function(e){
+  const entry=document.getElementById('e-upload-entry');
+  const exit=document.getElementById('e-upload-exit');
+  if(entry&&entry.contains(e.target)){
+    editActiveZone='entry';
+    entry.style.outline='2px solid var(--accent)';
+    if(exit)exit.style.outline='';
+  } else if(exit&&exit.contains(e.target)){
+    editActiveZone='exit';
+    exit.style.outline='2px solid var(--accent)';
+    if(entry)entry.style.outline='';
+  }
 });
 document.getElementById('exit-modal').addEventListener('click',function(e){if(e.target===this)closeExitModal();});
 // Dedicated paste listener for exit modal — catches Ctrl+V regardless of focus
