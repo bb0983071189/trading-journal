@@ -1719,14 +1719,16 @@ function saveEdit(){
 // Global paste: upload via Cloudinary
 document.addEventListener('paste',e=>{
   const exitModalOpen=document.getElementById('exit-modal')?.classList.contains('show');
-  // Only skip if typing in textarea AND exit modal is NOT open
-  if(!exitModalOpen && document.activeElement && document.activeElement.tagName==='TEXTAREA') return;
+  const editModalOpen=document.getElementById('edit-modal')?.classList.contains('show');
+  // Only skip if typing in textarea AND no modal is open
+  if(!exitModalOpen && !editModalOpen && document.activeElement && document.activeElement.tagName==='TEXTAREA') return;
   const items=Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
   if(!items.length)return;
   const ph2Visible=document.getElementById('ph2')?.style.display!=='none';
   items.forEach(item=>{
     const b=item.getAsFile();if(!b)return;
-    if(exitModalOpen) handleExitModalFiles([b]);
+    if(editModalOpen) handleEditImgFiles([b], editActiveZone);
+    else if(exitModalOpen) handleExitModalFiles([b]);
     else if(ph2Visible) handleExitImgFiles([b]);
     else handleImgFiles([b]);
   });
@@ -2462,34 +2464,6 @@ function exportCSV(){
 function clearAll(){if(!confirm('確定清除所有交易紀錄？此操作無法復原。'))return;trades=[];saveLS();fbClearAll();renderRec();}
 
 document.getElementById('edit-modal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
-// Edit modal paste — paste goes to entry imgs by default (user can use file picker for exit)
-document.getElementById('edit-modal').addEventListener('paste',function(e){
-  const items=Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
-  if(!items.length)return;
-  e.stopPropagation();
-  handleEditImgFiles(items.map(i=>i.getAsFile()).filter(Boolean), editActiveZone);
-  // Visual feedback
-  const zone=document.getElementById('e-upload-'+editActiveZone);
-  if(zone){
-    zone.style.borderColor='var(--accent)';
-    zone.style.background='var(--accent-bg)';
-    setTimeout(()=>{zone.style.borderColor='';zone.style.background='';},800);
-  }
-});
-// Update active zone label when hovering
-document.getElementById('edit-modal').addEventListener('mouseover',function(e){
-  const entry=document.getElementById('e-upload-entry');
-  const exit=document.getElementById('e-upload-exit');
-  if(entry&&entry.contains(e.target)){
-    editActiveZone='entry';
-    entry.style.outline='2px solid var(--accent)';
-    if(exit)exit.style.outline='';
-  } else if(exit&&exit.contains(e.target)){
-    editActiveZone='exit';
-    exit.style.outline='2px solid var(--accent)';
-    if(entry)entry.style.outline='';
-  }
-});
 document.getElementById('exit-modal').addEventListener('click',function(e){if(e.target===this)closeExitModal();});
 // Dedicated paste listener for exit modal — catches Ctrl+V regardless of focus
 document.getElementById('exit-modal').addEventListener('paste',function(e){
