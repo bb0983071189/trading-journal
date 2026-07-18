@@ -375,6 +375,31 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   .page{padding:12px}
   .em-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* WIN RATE ANALYSIS */
+.wr-section{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.wr-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.wr-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.wr-tab{padding:4px 11px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-family:inherit;transition:all .15s}
+.wr-tab.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.wr-header-row{display:grid;grid-template-columns:100px 1fr 48px 56px 60px;gap:8px;padding:4px 0 6px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.wr-header-row span{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em}
+.wr-header-row .wr-h-bar{text-align:center}
+.wr-header-row .wr-h-pct{text-align:right}
+.wr-header-row .wr-h-pnl{text-align:right}
+.wr-header-row .wr-h-n{text-align:right}
+.wr-row{display:grid;grid-template-columns:100px 1fr 48px 56px 60px;gap:8px;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border)}
+.wr-row:last-child{border:none}
+.wr-label{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wr-bar-wrap{height:7px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.wr-bar{height:7px;border-radius:4px}
+.wr-pct{font-size:12px;font-weight:700;text-align:right}
+.wr-pnl{font-size:11px;font-weight:500;text-align:right}
+.wr-n{font-size:10px;color:var(--text3);text-align:right}
+@media(max-width:520px){
+  .wr-header-row,.wr-row{grid-template-columns:80px 1fr 42px 50px}
+  .wr-header-row .wr-h-n,.wr-n{display:none}
+}
 </style>
 </head>
 <body>
@@ -797,6 +822,41 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <div class="chart-wrap" style="margin-top:12px;margin-bottom:0"><div class="chart-title" id="sf-chart-title">策略篩選損益曲線</div><div class="chart-container"><canvas id="chart-sf-pnl"></canvas></div></div>
   </div>
   <div class="chart-wrap" id="strat-bar-wrap"><div class="chart-title" id="strat-bar-title">各策略整體損益比較</div><div class="chart-container"><canvas id="chart-strat"></canvas></div></div>
+
+  <!-- WIN RATE ANALYSIS -->
+  <!-- 1. By Symbol -->
+  <div class="wr-section">
+    <div class="wr-title">
+      <span>📊 各幣種勝率分析</span>
+      <div class="wr-tabs" id="wr-sym-sort-tabs">
+        <button class="wr-tab on" onclick="setWRSort('sym','wr',this)">依勝率</button>
+        <button class="wr-tab" onclick="setWRSort('sym','pnl',this)">依損益</button>
+        <button class="wr-tab" onclick="setWRSort('sym','n',this)">依筆數</button>
+      </div>
+    </div>
+    <div class="wr-header-row">
+      <span>幣種</span><span class="wr-h-bar">勝率</span><span class="wr-h-pct">勝率%</span><span class="wr-h-pnl">損益</span><span class="wr-h-n">筆數</span>
+    </div>
+    <div id="wr-sym-list"></div>
+  </div>
+
+  <!-- 2. By Weekday -->
+  <div class="wr-section">
+    <div class="wr-title"><span>📅 星期勝率分析</span></div>
+    <div class="wr-header-row">
+      <span>星期</span><span class="wr-h-bar">勝率</span><span class="wr-h-pct">勝率%</span><span class="wr-h-pnl">損益</span><span class="wr-h-n">筆數</span>
+    </div>
+    <div id="wr-dow-list"></div>
+  </div>
+
+  <!-- 3. By Time Slot -->
+  <div class="wr-section">
+    <div class="wr-title"><span>🕐 時段勝率分析</span></div>
+    <div class="wr-header-row">
+      <span>時段</span><span class="wr-h-bar">勝率</span><span class="wr-h-pct">勝率%</span><span class="wr-h-pnl">損益</span><span class="wr-h-n">筆數</span>
+    </div>
+    <div id="wr-slot-list"></div>
+  </div>
 </div>
 
 <!-- DETAIL MODAL -->
@@ -2449,9 +2509,102 @@ function renderRep(){
 
   // Render calendar
   renderCalendar(list);
+
+  // Render win rate analysis
+  renderWinRateAnalysis(list);
 }
 
-// ===== EXPORT =====
+// ===== WIN RATE ANALYSIS =====
+let wrSymSort='wr'; // wr | pnl | n
+
+function setWRSort(section, sortBy, btn){
+  if(section==='sym'){
+    wrSymSort=sortBy;
+    document.querySelectorAll('#wr-sym-sort-tabs .wr-tab').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+  renderWinRateAnalysis(filterT(trades,repF,repPlat));
+}
+
+function wrRow(label, n, wins, totalPnl){
+  if(!n) return '';
+  const wr=Math.round(wins/n*100);
+  const barColor=wr>=60?'var(--green)':wr>=50?'#84cc16':wr>=40?'var(--amber)':'var(--red)';
+  const pnlColor=totalPnl>=0?'var(--green)':'var(--red)';
+  const pnlStr=(totalPnl>=0?'+':'')+totalPnl.toFixed(2);
+  return `<div class="wr-row">
+    <div class="wr-label" title="${label}">${label}</div>
+    <div class="wr-bar-wrap"><div class="wr-bar" style="width:${wr}%;background:${barColor}"></div></div>
+    <div class="wr-pct" style="color:${barColor}">${wr}%</div>
+    <div class="wr-pnl" style="color:${pnlColor}">${pnlStr}</div>
+    <div class="wr-n">${wins}/${n}</div>
+  </div>`;
+}
+
+function renderWinRateAnalysis(list){
+  const closed=list.filter(t=>t.status!=='open'&&t.netPnl!==undefined);
+  if(!closed.length){
+    ['wr-sym-list','wr-dow-list','wr-slot-list'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el)el.innerHTML='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">尚無已出場的交易資料</div>';
+    });
+    return;
+  }
+
+  // ── 1. By Symbol ──
+  const symMap={};
+  closed.forEach(t=>{
+    const sym=(t.symbol||'未知').toUpperCase();
+    if(!symMap[sym])symMap[sym]={n:0,wins:0,pnl:0};
+    symMap[sym].n++;
+    symMap[sym].pnl+=t.netPnl||0;
+    if((t.netPnl||0)>0)symMap[sym].wins++;
+  });
+  let symArr=Object.entries(symMap).map(([sym,d])=>({sym,n:d.n,wins:d.wins,pnl:parseFloat(d.pnl.toFixed(2)),wr:d.n?Math.round(d.wins/d.n*100):0}));
+  if(wrSymSort==='wr') symArr.sort((a,b)=>b.wr-a.wr||b.n-a.n);
+  else if(wrSymSort==='pnl') symArr.sort((a,b)=>b.pnl-a.pnl);
+  else symArr.sort((a,b)=>b.n-a.n);
+  const symEl=document.getElementById('wr-sym-list');
+  if(symEl) symEl.innerHTML=symArr.map(d=>wrRow(d.sym,d.n,d.wins,d.pnl)).join('');
+
+  // ── 2. By Weekday ──
+  const DOW=['日','一','二','三','四','五','六'];
+  const dowMap={};
+  DOW.forEach((_,i)=>dowMap[i]={n:0,wins:0,pnl:0});
+  closed.forEach(t=>{
+    if(!t.date)return;
+    const dow=new Date(t.date+'T12:00:00').getDay();
+    dowMap[dow].n++;
+    dowMap[dow].pnl+=t.netPnl||0;
+    if((t.netPnl||0)>0)dowMap[dow].wins++;
+  });
+  const dowEl=document.getElementById('wr-dow-list');
+  if(dowEl) dowEl.innerHTML=DOW.map((d,i)=>wrRow('星期'+d,dowMap[i].n,dowMap[i].wins,parseFloat(dowMap[i].pnl.toFixed(2)))).filter(Boolean).join('');
+
+  // ── 3. By Time Slot ──
+  const SLOTS=[
+    {label:'00–04 凌晨',start:0,end:4},
+    {label:'04–08 早晨',start:4,end:8},
+    {label:'08–12 上午',start:8,end:12},
+    {label:'12–16 下午',start:12,end:16},
+    {label:'16–20 傍晚',start:16,end:20},
+    {label:'20–24 晚上',start:20,end:24},
+  ];
+  const slotMap={};
+  SLOTS.forEach(s=>slotMap[s.label]={n:0,wins:0,pnl:0});
+  closed.forEach(t=>{
+    const time=t.etime||t.xtime||'';
+    if(!time)return;
+    const hour=parseInt(time.split(':')[0]);
+    const slot=SLOTS.find(s=>hour>=s.start&&hour<s.end);
+    if(!slot)return;
+    slotMap[slot.label].n++;
+    slotMap[slot.label].pnl+=t.netPnl||0;
+    if((t.netPnl||0)>0)slotMap[slot.label].wins++;
+  });
+  const slotEl=document.getElementById('wr-slot-list');
+  if(slotEl) slotEl.innerHTML=SLOTS.map(s=>wrRow(s.label,slotMap[s.label].n,slotMap[s.label].wins,parseFloat(slotMap[s.label].pnl.toFixed(2)))).filter(Boolean).join('');
+}
 function exportCSV(){
   const list=filterT(trades,recF);
   if(!list.length){alert('沒有資料可匯出');return;}
