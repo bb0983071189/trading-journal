@@ -417,34 +417,39 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 <!-- ENTRY PAGE -->
 <div class="page on" id="page-entry">
 
-  <!-- API 設定卡片 -->
-  <div class="cap-card" id="api-settings-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="card-title" style="margin:0">🔑 API 設定（選填）</div>
-      <button onclick="toggleApiSettings()" id="api-toggle-btn" style="font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer">展開</button>
-    </div>
-    <div id="api-settings-body" style="display:none">
-      <div class="hint-bar" style="margin-bottom:10px">填入 API Key 後可一鍵從 BingX 匯入最新持倉，自動填入進場資料。API Key 只存在你的瀏覽器，不會傳到任何第三方。</div>
-      <div class="g2" style="margin-bottom:9px">
-        <div class="f">
-          <label>BingX API Key</label>
-          <input type="text" id="bingx-api-key" placeholder="貼上 API Key" oninput="saveApiKeys()">
-        </div>
-        <div class="f">
-          <label>BingX Secret Key</label>
-          <input type="password" id="bingx-secret-key" placeholder="貼上 Secret Key" oninput="saveApiKeys()">
-        </div>
+  <!-- BingX 快速同步列 -->
+  <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)">
+    <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:160px">
+      <div style="width:32px;height:32px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⚡</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">BingX 即時同步</div>
+        <div style="font-size:11px;color:var(--text3)" id="sync-last-time">尚未同步</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-p" onclick="importFromBingX()" style="font-size:13px">
-          ⚡ 從 BingX 匯入最新持倉
-        </button>
-        <button class="btn" onclick="fetchBingXHistory()" style="font-size:13px">
-          📋 匯入歷史成交紀錄
-        </button>
-      </div>
-      <div id="api-status" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
     </div>
+    <button class="btn btn-p" onclick="syncBingXNow()" id="sync-now-btn" style="padding:8px 20px;font-size:13px;white-space:nowrap">
+      同步最新持倉
+    </button>
+    <button onclick="toggleApiSettings()" id="api-toggle-btn" style="font-size:11px;padding:5px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;white-space:nowrap">API 設定</button>
+  </div>
+
+  <!-- API 設定（預設隱藏）-->
+  <div id="api-settings-body" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)">
+    <div class="hint-bar" style="margin-bottom:10px">API Key 只存在你的瀏覽器，不會傳到任何第三方。只需要讀取權限。</div>
+    <div class="g2" style="margin-bottom:9px">
+      <div class="f">
+        <label>BingX API Key</label>
+        <input type="text" id="bingx-api-key" placeholder="貼上 API Key" oninput="saveApiKeys()">
+      </div>
+      <div class="f">
+        <label>BingX Secret Key</label>
+        <input type="password" id="bingx-secret-key" placeholder="貼上 Secret Key" oninput="saveApiKeys()">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-g" onclick="fetchBingXHistory()" style="font-size:12px">📋 匯入歷史成交紀錄</button>
+      <button onclick="toggleApiSettings()" class="btn" style="font-size:12px">收起</button>
+    </div>
+    <div id="api-status" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
   </div>
 
   <div class="cap-card">
@@ -2662,11 +2667,72 @@ const WORKER_URL='https://trading-api-proxy.bb0983071189.workers.dev';
 
 function toggleApiSettings(){
   const body=document.getElementById('api-settings-body');
-  const btn=document.getElementById('api-toggle-btn');
   const show=body.style.display==='none';
   body.style.display=show?'block':'none';
-  btn.textContent=show?'收起':'展開';
   if(show)loadApiKeys();
+}
+
+// ── 一鍵同步最新持倉 ──
+async function syncBingXNow(){
+  const btn=document.getElementById('sync-now-btn');
+  const lastTime=document.getElementById('sync-last-time');
+  if(btn){btn.textContent='同步中…';btn.disabled=true;}
+
+  // Load API keys first
+  loadApiKeys();
+
+  // Get positions
+  const posData=await bingxRequest('/openApi/swap/v2/user/positions');
+  if(!posData){
+    if(btn){btn.textContent='同步最新持倉';btn.disabled=false;}
+    setApiStatus('⚠️ 請先在 API 設定填入 Key','var(--amber)');
+    toggleApiSettings();
+    return;
+  }
+  if(posData.code!==0){
+    if(btn){btn.textContent='同步最新持倉';btn.disabled=false;}
+    setApiStatus('API 錯誤：'+(posData.msg||'請確認 API Key 是否正確'),'var(--red)');
+    return;
+  }
+
+  // Get open orders for TP/SL
+  const orderData=await bingxRequest('/openApi/swap/v2/trade/openOrders');
+  const openOrders=orderData?.data?.orders||[];
+
+  const positions=(posData.data||[]).filter(p=>Math.abs(parseFloat(p.positionAmt||0))>0);
+
+  if(!positions.length){
+    if(btn){btn.textContent='同步最新持倉';btn.disabled=false;}
+    const now=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+    if(lastTime)lastTime.textContent=`${now} 同步完成 — 目前無持倉`;
+    return;
+  }
+
+  // Attach TP/SL to each position
+  positions.forEach(pos=>{
+    const sym=pos.symbol;
+    const side=pos.positionSide; // "LONG" or "SHORT"
+    // Match orders: same symbol, same positionSide (TP/SL orders have opposite side but same positionSide)
+    const related=openOrders.filter(o=>o.symbol===sym&&o.positionSide===side);
+    const dir=side==='LONG'?'做多':'做空';
+    // Sort TPs: Long → ascending (nearest TP first), Short → descending
+    pos._tpOrders=related
+      .filter(o=>o.type==='TAKE_PROFIT_MARKET'||o.type==='TAKE_PROFIT')
+      .sort((a,b)=>dir==='做多'
+        ?parseFloat(a.stopPrice)-parseFloat(b.stopPrice)
+        :parseFloat(b.stopPrice)-parseFloat(a.stopPrice));
+    pos._slOrder=related.find(o=>o.type==='STOP_MARKET'||o.type==='STOP')||null;
+  });
+
+  if(btn){btn.textContent='同步最新持倉';btn.disabled=false;}
+  const now=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+  if(lastTime)lastTime.textContent=`${now} 已同步 — ${positions.length} 個持倉`;
+
+  if(positions.length===1){
+    fillFromBingXPosition(positions[0]);
+  } else {
+    showBingXPositionSelector(positions);
+  }
 }
 function saveApiKeys(){
   localStorage.setItem('bx_key',document.getElementById('bingx-api-key')?.value||'');
@@ -2766,51 +2832,51 @@ function fillFromBingXPosition(p){
   document.getElementById('bx-pos-sel')?.remove();
   document.getElementById('bx-sel')?.remove();
 
-  const sym=(p.symbol||'').replace('-SWAP','');
-  const side=p.positionSide||p.side||'';
-  const dir=side==='LONG'||side==='BUY'?'做多':'做空';
-  const price=parseFloat(p.avgPrice||p.entryPrice||0);
+  // Correct field names from actual BingX API response
+  const sym=(p.symbol||'').replace('-SWAP',''); // already "ETH-USDT" format
+  const side=p.positionSide||'';
+  const dir=side==='LONG'?'做多':'做空';
+  const price=parseFloat(p.avgPrice||0);
   const qty=Math.abs(parseFloat(p.positionAmt||p.availableAmt||0));
-  const lev=parseFloat((p.leverage||'20').replace('X','').replace('x',''))||20;
-  const margin=price&&qty&&lev?parseFloat((price*qty/lev).toFixed(2)):0;
+  const lev=typeof p.leverage==='number'?p.leverage:parseFloat((p.leverage||'20').toString().replace(/[Xx]/g,''))||20;
+  const margin=parseFloat(p.initialMargin||p.margin||0)||parseFloat((price*qty/lev).toFixed(2));
 
-  // TP orders sorted by price (ascending for long, descending for short)
+  // TP/SL from attached orders
   const tpOrders=p._tpOrders||[];
   const slOrder=p._slOrder||null;
-
-  // Sort TP: for long → ascending (TP1=lowest), for short → descending (TP1=highest)
-  const sortedTPs=dir==='做多'
-    ?[...tpOrders].sort((a,b)=>parseFloat(a.stopPrice)-parseFloat(b.stopPrice))
-    :[...tpOrders].sort((a,b)=>parseFloat(b.stopPrice)-parseFloat(a.stopPrice));
-
-  const tp1=parseFloat(sortedTPs[0]?.stopPrice||0);
-  const tp2=parseFloat(sortedTPs[1]?.stopPrice||0);
-  const tp3=parseFloat(sortedTPs[2]?.stopPrice||0);
+  const tp1=parseFloat(tpOrders[0]?.stopPrice||0);
+  const tp2=parseFloat(tpOrders[1]?.stopPrice||0);
+  const tp3=parseFloat(tpOrders[2]?.stopPrice||0);
   const sl=parseFloat(slOrder?.stopPrice||0);
 
-  // Time
-  const ts=parseInt(p.updateTime||p.time||Date.now());
+  // Time — use createTime for entry time
+  const ts=parseInt(p.createTime||p.updateTime||Date.now());
   const d=new Date(ts);
+  const dateStr=d.toISOString().slice(0,10);
+  const timeStr=d.toTimeString().slice(0,5);
 
-  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
+  // Fill form fields
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==''&&v!==0)el.value=v;};
   set('p1-sym', sym);
-  set('p1-date', d.toISOString().slice(0,10));
-  set('p1-etime', d.toTimeString().slice(0,5));
+  set('p1-date', dateStr);
+  set('p1-etime', timeStr);
   set('p1-lev', lev);
-  set('p1-margin', margin||'');
-  set('p1-entry', price||'');
-  if(sl) set('p1-sl', sl);
-  if(tp1) set('tp1-p', tp1);
-  if(tp2) set('tp2-p', tp2);
-  if(tp3) set('tp3-p', tp3);
+  set('p1-margin', margin.toFixed(2));
+  set('p1-entry', price);
+  if(sl>0) set('p1-sl', sl);
+  if(tp1>0) set('tp1-p', tp1);
+  if(tp2>0) set('tp2-p', tp2);
+  if(tp3>0) set('tp3-p', tp3);
   document.getElementById('p1-dir').value=dir;
+
+  // Set BingX as exchange and recalculate
   selEx('BingX','crypto',0.05);
   calcAll();
 
-  const tpInfo=sortedTPs.length?`TP1${tp2?'/TP2':''}${tp3?'/TP3':''} 已填入`:'無 TP';
-  const slInfo=sl?`SL：${sl}`:'無 SL';
-  setApiStatus(`✅ 已匯入 ${sym} ${dir}｜${tpInfo}｜${slInfo}`,'var(--green)');
-  document.getElementById('ph1')?.scrollIntoView({behavior:'smooth',block:'start'});
+  const tpInfo=tp1>0?`TP${tp2>0?tp3>0?'1/2/3':'1/2':'1'}已填`:'無TP';
+  const slInfo=sl>0?`SL:${sl}`:'無SL';
+  setApiStatus(`✅ ${sym} ${dir} ｜進場:${price} ｜${tpInfo} ｜${slInfo}`,'var(--green)');
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 // ── 匯入歷史成交 ──
