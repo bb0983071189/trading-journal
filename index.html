@@ -416,6 +416,37 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 
 <!-- ENTRY PAGE -->
 <div class="page on" id="page-entry">
+
+  <!-- API 設定卡片 -->
+  <div class="cap-card" id="api-settings-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin:0">🔑 API 設定（選填）</div>
+      <button onclick="toggleApiSettings()" id="api-toggle-btn" style="font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer">展開</button>
+    </div>
+    <div id="api-settings-body" style="display:none">
+      <div class="hint-bar" style="margin-bottom:10px">填入 API Key 後可一鍵從 BingX 匯入最新持倉，自動填入進場資料。API Key 只存在你的瀏覽器，不會傳到任何第三方。</div>
+      <div class="g2" style="margin-bottom:9px">
+        <div class="f">
+          <label>BingX API Key</label>
+          <input type="text" id="bingx-api-key" placeholder="貼上 API Key" oninput="saveApiKeys()">
+        </div>
+        <div class="f">
+          <label>BingX Secret Key</label>
+          <input type="password" id="bingx-secret-key" placeholder="貼上 Secret Key" oninput="saveApiKeys()">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="importFromBingX()" style="font-size:13px">
+          ⚡ 從 BingX 匯入最新持倉
+        </button>
+        <button class="btn" onclick="fetchBingXHistory()" style="font-size:13px">
+          📋 匯入歷史成交紀錄
+        </button>
+      </div>
+      <div id="api-status" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
+    </div>
+  </div>
+
   <div class="cap-card">
     <div class="card-title">帳戶設定</div>
     <div class="gauto">
@@ -2626,6 +2657,241 @@ document.getElementById('exit-modal').addEventListener('paste',function(e){
   handleExitModalFiles(items.map(i=>i.getAsFile()).filter(Boolean));
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeEditModal();closeExitModal();closeLb();}});
+// ===== BINGX API INTEGRATION =====
+const WORKER_URL='https://trading-api-proxy.bb0983071189.workers.dev';
+
+function toggleApiSettings(){
+  const body=document.getElementById('api-settings-body');
+  const btn=document.getElementById('api-toggle-btn');
+  const show=body.style.display==='none';
+  body.style.display=show?'block':'none';
+  btn.textContent=show?'收起':'展開';
+  if(show)loadApiKeys();
+}
+function saveApiKeys(){
+  localStorage.setItem('bx_key',document.getElementById('bingx-api-key')?.value||'');
+  localStorage.setItem('bx_secret',document.getElementById('bingx-secret-key')?.value||'');
+}
+function loadApiKeys(){
+  const k=localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw';
+  const s=localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw';
+  const kEl=document.getElementById('bingx-api-key');
+  const sEl=document.getElementById('bingx-secret-key');
+  if(kEl&&!kEl.value)kEl.value=k;
+  if(sEl&&!sEl.value)sEl.value=s;
+}
+function getApiKeys(){
+  return{
+    key:document.getElementById('bingx-api-key')?.value||localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw',
+    secret:document.getElementById('bingx-secret-key')?.value||localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw'
+  };
+}
+function setApiStatus(msg,color='var(--text2)'){
+  const el=document.getElementById('api-status');
+  if(el){el.textContent=msg;el.style.color=color;}
+}
+async function bingxRequest(path){
+  const {key,secret}=getApiKeys();
+  try{
+    const res=await fetch(`${WORKER_URL}?exchange=bingx&path=${encodeURIComponent(path)}`,{
+      headers:{'X-BINGX-KEY':key,'X-BINGX-SECRET':secret}
+    });
+    return await res.json();
+  }catch(e){setApiStatus('API 請求失敗：'+e.message,'var(--red)');return null;}
+}
+
+// ── 匯入目前持倉 ──
+async function importFromBingX(){
+  setApiStatus('🔄 正在取得持倉資料…','var(--blue)');
+
+  // Get positions (actual open positions)
+  const posData=await bingxRequest('/openApi/swap/v2/user/positions');
+  if(!posData)return;
+  if(posData.code!==0){setApiStatus('API 錯誤：'+(posData.msg||JSON.stringify(posData)),'var(--red)');return;}
+
+  // Get open orders (TP/SL orders)
+  const orderData=await bingxRequest('/openApi/swap/v2/trade/openOrders');
+  const openOrders=orderData?.data?.orders||[];
+
+  const positions=(posData.data||[]).filter(p=>parseFloat(p.positionAmt||p.availableAmt||0)!==0);
+  if(!positions.length){setApiStatus('目前沒有開倉中的持倉','var(--text2)');return;}
+
+  // Attach TP/SL orders to each position
+  positions.forEach(pos=>{
+    const sym=pos.symbol;
+    const side=pos.positionSide||pos.side;
+    const related=openOrders.filter(o=>o.symbol===sym&&o.positionSide===side&&o.reduceOnly);
+    const tpOrders=related.filter(o=>o.type==='TAKE_PROFIT_MARKET'||o.type==='TAKE_PROFIT').sort((a,b)=>parseFloat(a.stopPrice)-parseFloat(b.stopPrice));
+    const slOrders=related.filter(o=>o.type==='STOP_MARKET'||o.type==='STOP');
+    pos._tpOrders=tpOrders;
+    pos._slOrder=slOrders[0]||null;
+  });
+
+  if(positions.length===1)fillFromBingXPosition(positions[0]);
+  else showBingXPositionSelector(positions);
+}
+
+function showBingXPositionSelector(positions){
+  const html=positions.map((p,i)=>{
+    const sym=p.symbol||'';
+    const side=p.positionSide||p.side||'';
+    const dir=side==='LONG'||side==='BUY'?'做多':'做空';
+    const price=parseFloat(p.avgPrice||p.entryPrice||0);
+    const pnl=parseFloat(p.unrealizedProfit||p.unRealizedProfit||0);
+    return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="fillFromBingXPos_idx(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600">${sym}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:${dir==='做多'?'var(--green-bg)':'var(--red-bg)'};color:${dir==='做多'?'var(--green)':'var(--red)'}">${dir}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">均價：${price} ｜ 未實現盈虧：<span style="color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:500">${pnl>=0?'+':''}${pnl.toFixed(2)} U</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">TP：${(p._tpOrders||[]).map(o=>o.stopPrice).join(' / ')||'未設'} ｜ SL：${p._slOrder?.stopPrice||'未設'}</div>
+    </div>`;
+  }).join('');
+  window._bxPositions=positions;
+  const ov=document.createElement('div');
+  ov.id='bx-pos-sel';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto">
+    <div style="font-weight:600;margin-bottom:12px">選擇要匯入的持倉</div>${html}
+    <button onclick="document.getElementById('bx-pos-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+window.fillFromBingXPos_idx=function(i){
+  document.getElementById('bx-pos-sel')?.remove();
+  fillFromBingXPosition(window._bxPositions[i]);
+};
+
+function fillFromBingXPosition(p){
+  document.getElementById('bx-pos-sel')?.remove();
+  document.getElementById('bx-sel')?.remove();
+
+  const sym=(p.symbol||'').replace('-SWAP','');
+  const side=p.positionSide||p.side||'';
+  const dir=side==='LONG'||side==='BUY'?'做多':'做空';
+  const price=parseFloat(p.avgPrice||p.entryPrice||0);
+  const qty=Math.abs(parseFloat(p.positionAmt||p.availableAmt||0));
+  const lev=parseFloat((p.leverage||'20').replace('X','').replace('x',''))||20;
+  const margin=price&&qty&&lev?parseFloat((price*qty/lev).toFixed(2)):0;
+
+  // TP orders sorted by price (ascending for long, descending for short)
+  const tpOrders=p._tpOrders||[];
+  const slOrder=p._slOrder||null;
+
+  // Sort TP: for long → ascending (TP1=lowest), for short → descending (TP1=highest)
+  const sortedTPs=dir==='做多'
+    ?[...tpOrders].sort((a,b)=>parseFloat(a.stopPrice)-parseFloat(b.stopPrice))
+    :[...tpOrders].sort((a,b)=>parseFloat(b.stopPrice)-parseFloat(a.stopPrice));
+
+  const tp1=parseFloat(sortedTPs[0]?.stopPrice||0);
+  const tp2=parseFloat(sortedTPs[1]?.stopPrice||0);
+  const tp3=parseFloat(sortedTPs[2]?.stopPrice||0);
+  const sl=parseFloat(slOrder?.stopPrice||0);
+
+  // Time
+  const ts=parseInt(p.updateTime||p.time||Date.now());
+  const d=new Date(ts);
+
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
+  set('p1-sym', sym);
+  set('p1-date', d.toISOString().slice(0,10));
+  set('p1-etime', d.toTimeString().slice(0,5));
+  set('p1-lev', lev);
+  set('p1-margin', margin||'');
+  set('p1-entry', price||'');
+  if(sl) set('p1-sl', sl);
+  if(tp1) set('tp1-p', tp1);
+  if(tp2) set('tp2-p', tp2);
+  if(tp3) set('tp3-p', tp3);
+  document.getElementById('p1-dir').value=dir;
+  selEx('BingX','crypto',0.05);
+  calcAll();
+
+  const tpInfo=sortedTPs.length?`TP1${tp2?'/TP2':''}${tp3?'/TP3':''} 已填入`:'無 TP';
+  const slInfo=sl?`SL：${sl}`:'無 SL';
+  setApiStatus(`✅ 已匯入 ${sym} ${dir}｜${tpInfo}｜${slInfo}`,'var(--green)');
+  document.getElementById('ph1')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── 匯入歷史成交 ──
+async function fetchBingXHistory(){
+  setApiStatus('🔄 正在取得歷史成交記錄…','var(--blue)');
+  const data=await bingxRequest('/openApi/swap/v2/trade/allFillOrders?limit=20');
+  if(!data)return;
+  if(data.code!==0){setApiStatus('API 錯誤：'+(data.msg||JSON.stringify(data)),'var(--red)');return;}
+  const fills=data.data?.fill_orders||data.data?.orders||data.data||[];
+  if(!fills.length){setApiStatus('沒有找到歷史成交記錄','var(--text2)');return;}
+  showBingXHistorySelector(Array.isArray(fills)?fills:[]);
+}
+
+function showBingXHistorySelector(fills){
+  window._bxFills=fills;
+  const html=fills.slice(0,20).map((o,i)=>{
+    const sym=(o.symbol||'').replace('-SWAP','');
+    const ts=parseInt(o.time||o.updateTime||Date.now());
+    const d=new Date(ts);
+    const pnl=parseFloat(o.profit||o.realizedPnl||0);
+    return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="importBingXFill(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-weight:600">${sym}</span>
+        <span style="font-weight:600;color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pnl.toFixed(2)} U</span>
+      </div>
+      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ｜ ${d.toTimeString().slice(0,5)} ｜ 成交價：${o.price||o.avgPrice||'—'}</div>
+    </div>`;
+  }).join('');
+  const ov=document.createElement('div');
+  ov.id='bx-hist-sel';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto">
+    <div style="font-weight:600;margin-bottom:4px">選擇要匯入的歷史成交</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">匯入後自動建立已出場紀錄</div>${html}
+    <button onclick="document.getElementById('bx-hist-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+window.importBingXFill=function(i){
+  document.getElementById('bx-hist-sel')?.remove();
+  const o=window._bxFills[i];if(!o)return;
+  const rawSym=o.symbol||'';
+  const sym=rawSym.replace('-SWAP','').replace(/USDT$/,'')+'-USDT';
+  const ts=parseInt(o.time||o.updateTime||Date.now());
+  const d=new Date(ts);
+  const pnl=parseFloat(o.profit||o.realizedPnl||0);
+  const price=parseFloat(o.price||o.avgPrice||0);
+  const qty=parseFloat(o.qty||o.origQty||0);
+  const lev=parseFloat(o.leverage||20);
+  const side=o.side||o.positionSide||'';
+  const dir=(side==='BUY'||side==='LONG')?'做多':'做空';
+  const fee=Math.abs(parseFloat(o.fee||o.commission||0));
+  const xrMap={'TAKE_PROFIT':'止盈 TP1','TAKE_PROFIT_MARKET':'止盈 TP1','STOP':'止損 SL','STOP_MARKET':'止損 SL'};
+  const t={
+    id:Date.now(),
+    date:d.toISOString().slice(0,10),
+    etime:d.toTimeString().slice(0,5),
+    xtime:d.toTimeString().slice(0,5),
+    exchange:'BingX',platform:'crypto',ftmoType:'',
+    symbol:sym,dir,lev,
+    margin:price&&qty&&lev?parseFloat((price*qty/lev).toFixed(2)):0,
+    notional:price*qty,
+    entry:price,exit:price,
+    sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,
+    exitReason:o.type||'manual',
+    exitReasonLabel:xrMap[o.type]||'已出場',
+    closePct:1,netPnl:parseFloat(pnl.toFixed(4)),
+    takerRate:0.05,fee,
+    strats:[],tf:'',emotion:'',
+    reason:'（從 BingX 自動匯入）',notes:'',
+    images:[],exitImages:[],
+    status:'closed',score:null,grade:'—',
+    p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,
+    p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null
+  };
+  trades.unshift(t);saveLS();fbSaveTrade(t);
+  setApiStatus(`✅ 已匯入 ${sym} ${dir}（${pnl>=0?'+':''}${pnl.toFixed(2)} U）`,'var(--green)');
+  showPage('records');
+};
+
 // Initialize
 updateStratGrid();
 saveLS();
