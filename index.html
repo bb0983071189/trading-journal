@@ -417,17 +417,20 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 <!-- ENTRY PAGE -->
 <div class="page on" id="page-entry">
 
-  <!-- BingX 快速同步列 -->
+  <!-- BingX + OKX 快速同步列 -->
   <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)">
     <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:160px">
       <div style="width:32px;height:32px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⚡</div>
       <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text)">BingX 即時同步</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">交易所即時同步</div>
         <div style="font-size:11px;color:var(--text3)" id="sync-last-time">尚未同步</div>
       </div>
     </div>
-    <button class="btn btn-p" onclick="syncBingXNow()" id="sync-now-btn" style="padding:8px 20px;font-size:13px;white-space:nowrap">
-      同步最新持倉
+    <button class="btn" onclick="syncExchange('BingX')" id="sync-bingx-btn" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
+      ⚡ BingX
+    </button>
+    <button class="btn" onclick="syncExchange('OKX')" id="sync-okx-btn" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd">
+      ⚡ OKX
     </button>
     <button onclick="toggleApiSettings()" id="api-toggle-btn" style="font-size:11px;padding:5px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;white-space:nowrap">API 設定</button>
   </div>
@@ -435,7 +438,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   <!-- API 設定（預設隱藏）-->
   <div id="api-settings-body" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)">
     <div class="hint-bar" style="margin-bottom:10px">API Key 只存在你的瀏覽器，不會傳到任何第三方。只需要讀取權限。</div>
-    <div class="g2" style="margin-bottom:9px">
+    <div style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:6px">BingX</div>
+    <div class="g2" style="margin-bottom:12px">
       <div class="f">
         <label>BingX API Key</label>
         <input type="text" id="bingx-api-key" placeholder="貼上 API Key" oninput="saveApiKeys()">
@@ -445,8 +449,24 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         <input type="password" id="bingx-secret-key" placeholder="貼上 Secret Key" oninput="saveApiKeys()">
       </div>
     </div>
+    <div style="font-size:11px;font-weight:600;color:var(--blue);margin-bottom:6px">OKX</div>
+    <div class="g3" style="margin-bottom:12px">
+      <div class="f">
+        <label>OKX API Key</label>
+        <input type="text" id="okx-api-key" placeholder="貼上 API Key" oninput="saveApiKeys()">
+      </div>
+      <div class="f">
+        <label>OKX Secret Key</label>
+        <input type="password" id="okx-secret-key" placeholder="貼上 Secret Key" oninput="saveApiKeys()">
+      </div>
+      <div class="f">
+        <label>OKX Passphrase</label>
+        <input type="password" id="okx-passphrase" placeholder="貼上 Passphrase" oninput="saveApiKeys()">
+      </div>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-g" onclick="fetchBingXHistory()" style="font-size:12px">📋 匯入歷史成交紀錄</button>
+      <button class="btn btn-g" onclick="fetchBingXHistory()" style="font-size:12px">📋 BingX 歷史成交</button>
+      <button class="btn" style="font-size:12px;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd" onclick="fetchOKXHistory()">📋 OKX 歷史成交</button>
       <button onclick="toggleApiSettings()" class="btn" style="font-size:12px">收起</button>
     </div>
     <div id="api-status" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
@@ -2737,30 +2757,249 @@ async function syncBingXNow(){
 function saveApiKeys(){
   localStorage.setItem('bx_key',document.getElementById('bingx-api-key')?.value||'');
   localStorage.setItem('bx_secret',document.getElementById('bingx-secret-key')?.value||'');
+  localStorage.setItem('okx_key',document.getElementById('okx-api-key')?.value||'');
+  localStorage.setItem('okx_secret',document.getElementById('okx-secret-key')?.value||'');
+  localStorage.setItem('okx_pass',document.getElementById('okx-passphrase')?.value||'');
 }
 function loadApiKeys(){
-  const k=localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw';
-  const s=localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw';
-  const kEl=document.getElementById('bingx-api-key');
-  const sEl=document.getElementById('bingx-secret-key');
-  if(kEl&&!kEl.value)kEl.value=k;
-  if(sEl&&!sEl.value)sEl.value=s;
+  const bk=localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw';
+  const bs=localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw';
+  const ok=localStorage.getItem('okx_key')||'38e221e6-6e4b-4823-9b52-6a195043b2e0';
+  const os=localStorage.getItem('okx_secret')||'2CA44F79E29DC1108DF9B05E6A0E477E';
+  const op=localStorage.getItem('okx_pass')||'Bb0983653993!';
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&!el.value)el.value=v;};
+  set('bingx-api-key',bk);set('bingx-secret-key',bs);
+  set('okx-api-key',ok);set('okx-secret-key',os);set('okx-passphrase',op);
 }
 function getApiKeys(){
   return{
-    key:document.getElementById('bingx-api-key')?.value||localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw',
-    secret:document.getElementById('bingx-secret-key')?.value||localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw'
+    bx_key:document.getElementById('bingx-api-key')?.value||localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw',
+    bx_secret:document.getElementById('bingx-secret-key')?.value||localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw',
+    okx_key:document.getElementById('okx-api-key')?.value||localStorage.getItem('okx_key')||'38e221e6-6e4b-4823-9b52-6a195043b2e0',
+    okx_secret:document.getElementById('okx-secret-key')?.value||localStorage.getItem('okx_secret')||'2CA44F79E29DC1108DF9B05E6A0E477E',
+    okx_pass:document.getElementById('okx-passphrase')?.value||localStorage.getItem('okx_pass')||'Bb0983653993!'
   };
 }
+
+async function okxRequest(path){
+  const k=getApiKeys();
+  try{
+    const res=await fetch(`${WORKER_URL}?exchange=okx&path=${encodeURIComponent(path)}`,{
+      headers:{'X-OKX-KEY':k.okx_key,'X-OKX-SECRET':k.okx_secret,'X-OKX-PASSPHRASE':k.okx_pass}
+    });
+    return await res.json();
+  }catch(e){setApiStatus('OKX API 請求失敗：'+e.message,'var(--red)');return null;}
+}
+
+// ── 統一同步入口 ──
+async function syncExchange(exchange){
+  if(exchange==='BingX') await syncBingXNow();
+  else if(exchange==='OKX') await syncOKXNow();
+}
+
+// ── OKX 同步持倉 ──
+async function syncOKXNow(){
+  const btn=document.getElementById('sync-okx-btn');
+  const lastTime=document.getElementById('sync-last-time');
+  if(btn){btn.textContent='同步中…';btn.disabled=true;}
+
+  // OKX 合約持倉
+  const posData=await okxRequest('/api/v5/account/positions?instType=SWAP');
+  if(!posData){if(btn){btn.textContent='⚡ OKX';btn.disabled=false;}return;}
+  if(posData.code!=='0'){
+    if(btn){btn.textContent='⚡ OKX';btn.disabled=false;}
+    setApiStatus('OKX API 錯誤：'+(posData.msg||posData.sMsg||JSON.stringify(posData)),'var(--red)');
+    return;
+  }
+
+  const positions=(posData.data||[]).filter(p=>parseFloat(p.pos||0)!==0);
+  if(btn){btn.textContent='⚡ OKX';btn.disabled=false;}
+
+  if(!positions.length){
+    const now=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+    if(lastTime)lastTime.textContent=`${now} OKX 同步完成 — 目前無持倉`;
+    setApiStatus('目前 OKX 沒有開倉中的持倉','var(--text2)');
+    return;
+  }
+
+  const now=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+  if(lastTime)lastTime.textContent=`${now} OKX 已同步 — ${positions.length} 個持倉`;
+
+  if(positions.length===1) fillFromOKXPosition(positions[0]);
+  else showOKXPositionSelector(positions);
+}
+
+function showOKXPositionSelector(positions){
+  const html=positions.map((p,i)=>{
+    const sym=p.instId||'';
+    const dir=p.posSide==='long'||parseFloat(p.pos||0)>0?'做多':'做空';
+    const price=parseFloat(p.avgPx||0);
+    const pnl=parseFloat(p.upl||0);
+    return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="fillFromOKXPos_idx(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600">${sym}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:${dir==='做多'?'var(--green-bg)':'var(--red-bg)'};color:${dir==='做多'?'var(--green)':'var(--red)'}">${dir}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">均價：${price} ｜ 未實現盈虧：<span style="color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:500">${pnl>=0?'+':''}${pnl.toFixed(2)} U</span></div>
+    </div>`;
+  }).join('');
+  window._okxPositions=positions;
+  const ov=document.createElement('div');
+  ov.id='okx-pos-sel';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative">
+    <button onclick="document.getElementById('okx-pos-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
+    <div style="font-weight:600;margin-bottom:12px;padding-right:28px">選擇要匯入的 OKX 持倉</div>${html}
+    <button onclick="document.getElementById('okx-pos-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+window.fillFromOKXPos_idx=function(i){
+  document.getElementById('okx-pos-sel')?.remove();
+  fillFromOKXPosition(window._okxPositions[i]);
+};
+
+function fillFromOKXPosition(p){
+  document.getElementById('okx-pos-sel')?.remove();
+
+  // OKX field mapping
+  const sym=p.instId||''; // e.g. "BTC-USDT-SWAP" → remove -SWAP
+  const cleanSym=sym.replace('-SWAP','');
+  const posSide=p.posSide||'';
+  const pos=parseFloat(p.pos||0);
+  const dir=posSide==='long'||(posSide==='net'&&pos>0)?'做多':'做空';
+  const price=parseFloat(p.avgPx||0);
+  const lev=parseFloat(p.lever||20);
+  const margin=parseFloat(p.imr||p.margin||0)||parseFloat((Math.abs(pos)*price/lev).toFixed(2));
+  const upl=parseFloat(p.upl||0);
+
+  // TP/SL from algo orders — fetch separately
+  const ts=parseInt(p.cTime||p.uTime||Date.now());
+  const d=new Date(ts);
+
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==''&&v!==0&&v!==null)el.value=v;};
+  set('p1-sym', cleanSym);
+  set('p1-date', d.toISOString().slice(0,10));
+  set('p1-etime', d.toTimeString().slice(0,5));
+  set('p1-lev', lev);
+  set('p1-margin', margin.toFixed(2));
+  set('p1-entry', price);
+  document.getElementById('p1-dir').value=dir;
+  selEx('OKX','crypto',0.0360);
+
+  // Fetch TP/SL algo orders for this position
+  okxRequest(`/api/v5/trade/orders-algo-pending?instType=SWAP&instId=${sym}&ordType=oco,conditional`).then(algoData=>{
+    const algos=algoData?.data||[];
+    const tpOrders=algos.filter(o=>o.tpTriggerPx&&parseFloat(o.tpTriggerPx)>0);
+    const slOrders=algos.filter(o=>o.slTriggerPx&&parseFloat(o.slTriggerPx)>0);
+    // Sort TP by price
+    const sortedTPs=dir==='做多'
+      ?tpOrders.sort((a,b)=>parseFloat(a.tpTriggerPx)-parseFloat(b.tpTriggerPx))
+      :tpOrders.sort((a,b)=>parseFloat(b.tpTriggerPx)-parseFloat(a.tpTriggerPx));
+    const tp1=parseFloat(sortedTPs[0]?.tpTriggerPx||0);
+    const tp2=parseFloat(sortedTPs[1]?.tpTriggerPx||0);
+    const tp3=parseFloat(sortedTPs[2]?.tpTriggerPx||0);
+    const sl=parseFloat(slOrders[0]?.slTriggerPx||0);
+    if(tp1>0)set('tp1-p',tp1);
+    if(tp2>0)set('tp2-p',tp2);
+    if(tp3>0)set('tp3-p',tp3);
+    if(sl>0)set('p1-sl',sl);
+    calcAll();
+    const tpInfo=tp1>0?`TP${tp2>0?tp3>0?'1/2/3':'1/2':'1'}已填`:'無TP';
+    const slInfo=sl>0?`SL:${sl}`:'無SL';
+    setApiStatus(`✅ OKX ${cleanSym} ${dir} ｜進場:${price} ｜${tpInfo} ｜${slInfo}`,'var(--green)');
+  }).catch(()=>{
+    calcAll();
+    setApiStatus(`✅ OKX ${cleanSym} ${dir} ｜進場:${price}（TP/SL 需手動填）`,'var(--green)');
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── OKX 歷史成交 ──
+async function fetchOKXHistory(){
+  setApiStatus('🔄 正在取得 OKX 歷史成交…','var(--blue)');
+  const data=await okxRequest('/api/v5/trade/fills?instType=SWAP&limit=20');
+  if(!data)return;
+  if(data.code!=='0'){setApiStatus('OKX API 錯誤：'+(data.msg||'請確認 API Key'),'var(--red)');return;}
+  const fills=data.data||[];
+  if(!fills.length){setApiStatus('沒有找到 OKX 歷史成交','var(--text2)');return;}
+  showOKXHistorySelector(fills);
+}
+
+function showOKXHistorySelector(fills){
+  window._okxFills=fills;
+  const html=fills.slice(0,20).map((o,i)=>{
+    const sym=(o.instId||'').replace('-SWAP','');
+    const ts=parseInt(o.ts||Date.now());
+    const d=new Date(ts);
+    const pnl=parseFloat(o.pnl||0);
+    const dir=o.side==='buy'?'做多平倉':'做空平倉';
+    return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="importOKXFill(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-weight:600">${sym}</span>
+        <span style="font-weight:600;color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pnl.toFixed(4)} U</span>
+      </div>
+      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} ｜ ${dir} ｜ 成交價：${o.fillPx||'—'}</div>
+    </div>`;
+  }).join('');
+  const ov=document.createElement('div');
+  ov.id='okx-hist-sel';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative">
+    <button onclick="document.getElementById('okx-hist-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
+    <div style="font-weight:600;margin-bottom:4px;padding-right:28px">OKX 歷史成交</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">選擇後自動建立已出場紀錄</div>${html}
+    <button onclick="document.getElementById('okx-hist-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+window.importOKXFill=function(i){
+  document.getElementById('okx-hist-sel')?.remove();
+  const o=window._okxFills[i];if(!o)return;
+  const sym=(o.instId||'').replace('-SWAP','');
+  const ts=parseInt(o.ts||Date.now());
+  const d=new Date(ts);
+  const pnl=parseFloat(o.pnl||0);
+  const price=parseFloat(o.fillPx||0);
+  const fee=Math.abs(parseFloat(o.fee||0));
+  // OKX: side='buy' means closing short (做空平倉), side='sell' means closing long (做多平倉)
+  const dir=o.posSide==='long'||(o.side==='sell')?'做多':'做空';
+  const t={
+    id:Date.now(),
+    date:d.toISOString().slice(0,10),
+    etime:d.toTimeString().slice(0,5),
+    xtime:d.toTimeString().slice(0,5),
+    exchange:'OKX',platform:'crypto',ftmoType:'',
+    symbol:sym,dir,
+    lev:0,margin:0,notional:0,
+    entry:price,exit:price,
+    sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,
+    exitReason:'manual',exitReasonLabel:'已出場',
+    closePct:1,netPnl:parseFloat(pnl.toFixed(4)),
+    takerRate:0.036,fee,
+    strats:[],tf:'',emotion:'',
+    reason:'（從 OKX 自動匯入）',notes:'',
+    images:[],exitImages:[],
+    status:'closed',score:null,grade:'—',
+    p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,
+    p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null
+  };
+  trades.unshift(t);saveLS();fbSaveTrade(t);
+  setApiStatus(`✅ 已匯入 OKX ${sym} ${dir}（${pnl>=0?'+':''}${pnl.toFixed(4)} U）`,'var(--green)');
+  showPage('records');
+};
 function setApiStatus(msg,color='var(--text2)'){
   const el=document.getElementById('api-status');
   if(el){el.textContent=msg;el.style.color=color;}
 }
 async function bingxRequest(path){
-  const {key,secret}=getApiKeys();
+  const k=getApiKeys();
   try{
     const res=await fetch(`${WORKER_URL}?exchange=bingx&path=${encodeURIComponent(path)}`,{
-      headers:{'X-BINGX-KEY':key,'X-BINGX-SECRET':secret}
+      headers:{'X-BINGX-KEY':k.bx_key,'X-BINGX-SECRET':k.bx_secret}
     });
     return await res.json();
   }catch(e){setApiStatus('API 請求失敗：'+e.message,'var(--red)');return null;}
@@ -2816,9 +3055,11 @@ function showBingXPositionSelector(positions){
   window._bxPositions=positions;
   const ov=document.createElement('div');
   ov.id='bx-pos-sel';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
-  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto">
-    <div style="font-weight:600;margin-bottom:12px">選擇要匯入的持倉</div>${html}
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative">
+    <button onclick="document.getElementById('bx-pos-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
+    <div style="font-weight:600;margin-bottom:12px;padding-right:28px">選擇要匯入的持倉</div>${html}
     <button onclick="document.getElementById('bx-pos-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
   </div>`;
   document.body.appendChild(ov);
@@ -2907,9 +3148,11 @@ function showBingXHistorySelector(fills){
   }).join('');
   const ov=document.createElement('div');
   ov.id='bx-hist-sel';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
-  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto">
-    <div style="font-weight:600;margin-bottom:4px">選擇要匯入的歷史成交</div>
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative">
+    <button onclick="document.getElementById('bx-hist-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
+    <div style="font-weight:600;margin-bottom:4px;padding-right:28px">選擇要匯入的歷史成交</div>
     <div style="font-size:11px;color:var(--text2);margin-bottom:12px">匯入後自動建立已出場紀錄</div>${html}
     <button onclick="document.getElementById('bx-hist-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
   </div>`;
