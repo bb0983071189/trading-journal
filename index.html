@@ -2918,36 +2918,39 @@ function fillFromOKXPosition(p){
 
 // ── OKX 歷史成交 ──
 async function fetchOKXHistory(){
-  setApiStatus('🔄 正在取得 OKX 歷史成交…','var(--blue)');
-  const data=await okxRequest('/api/v5/trade/fills?instType=SWAP&limit=20');
+  setApiStatus('🔄 正在取得 OKX 歷史訂單…','var(--blue)');
+  // Use orders-history for correct PnL, filter closed orders only
+  const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&limit=20&state=filled');
   if(!data)return;
   if(data.code!=='0'){setApiStatus('OKX API 錯誤：'+(data.msg||'請確認 API Key'),'var(--red)');return;}
-  const fills=data.data||[];
-  if(!fills.length){setApiStatus('沒有找到 OKX 歷史成交','var(--text2)');return;}
-  showOKXHistorySelector(fills);
+  const orders=data.data||[];
+  if(!orders.length){setApiStatus('沒有找到 OKX 歷史訂單','var(--text2)');return;}
+  showOKXHistorySelector(orders);
 }
 
-function showOKXHistorySelector(fills){
-  window._okxFills=fills;
-  const html=fills.slice(0,20).map((o,i)=>{
-    const sym=(o.instId||'').replace('-SWAP','');
-    const ts=parseInt(o.ts||Date.now());
+function showOKXHistorySelector(orders){
+  window._okxFills=orders;
+  const html=orders.slice(0,20).map((o,i)=>{
+    const sym=(o.instId||'').replace('-SWAP','').replace('-SWAP-USDT','-USDT');
+    const ts=parseInt(o.uTime||o.cTime||Date.now());
     const d=new Date(ts);
     const pnl=parseFloat(o.pnl||0);
-    const dir=o.side==='buy'?'做多平倉':'做空平倉';
+    const avgPx=parseFloat(o.avgPx||0);
+    // OKX: side=buy posSide=short → 做空平倉; side=sell posSide=long → 做多平倉
+    const dir=o.posSide==='long'?'做多':'做空';
     return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="importOKXFill(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="display:flex;justify-content:space-between">
         <span style="font-weight:600">${sym}</span>
         <span style="font-weight:600;color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pnl.toFixed(4)} U</span>
       </div>
-      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} ｜ ${dir} ｜ 成交價：${o.fillPx||'—'}</div>
+      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} ｜ ${dir} ｜ 均價：${avgPx||'—'}</div>
     </div>`;
   }).join('');
   const ov=document.createElement('div');
   ov.id='okx-hist-sel';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
   ov.onclick=function(e){if(e.target===this)this.remove();};
-  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative">
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative;cursor:default">
     <button onclick="document.getElementById('okx-hist-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
     <div style="font-weight:600;margin-bottom:4px;padding-right:28px">OKX 歷史成交</div>
     <div style="font-size:11px;color:var(--text2);margin-bottom:12px">選擇後自動建立已出場紀錄</div>${html}
@@ -2959,14 +2962,15 @@ function showOKXHistorySelector(fills){
 window.importOKXFill=function(i){
   document.getElementById('okx-hist-sel')?.remove();
   const o=window._okxFills[i];if(!o)return;
-  const sym=(o.instId||'').replace('-SWAP','');
-  const ts=parseInt(o.ts||Date.now());
+  const sym=(o.instId||'').replace('-SWAP','').replace('-SWAP-USDT','-USDT');
+  const ts=parseInt(o.uTime||o.cTime||Date.now());
   const d=new Date(ts);
   const pnl=parseFloat(o.pnl||0);
-  const price=parseFloat(o.fillPx||0);
-  const fee=Math.abs(parseFloat(o.fee||0));
-  // OKX: side='buy' means closing short (做空平倉), side='sell' means closing long (做多平倉)
-  const dir=o.posSide==='long'||(o.side==='sell')?'做多':'做空';
+  const price=parseFloat(o.avgPx||o.px||0);
+  const fee=Math.abs(parseFloat(o.fee||o.rebate||0));
+  const dir=o.posSide==='long'?'做多':'做空';
+  const sz=parseFloat(o.sz||o.accFillSz||0);
+  const lev=parseFloat(o.lever||20);
   const t={
     id:Date.now(),
     date:d.toISOString().slice(0,10),
@@ -2974,7 +2978,7 @@ window.importOKXFill=function(i){
     xtime:d.toTimeString().slice(0,5),
     exchange:'OKX',platform:'crypto',ftmoType:'',
     symbol:sym,dir,
-    lev:0,margin:0,notional:0,
+    lev,margin:0,notional:price*sz,
     entry:price,exit:price,
     sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,
     exitReason:'manual',exitReasonLabel:'已出場',
@@ -3122,38 +3126,50 @@ function fillFromBingXPosition(p){
 
 // ── 匯入歷史成交 ──
 async function fetchBingXHistory(){
-  setApiStatus('🔄 正在取得歷史成交記錄…','var(--blue)');
-  const data=await bingxRequest('/openApi/swap/v2/trade/allFillOrders?limit=20');
-  if(!data)return;
-  if(data.code!==0){setApiStatus('API 錯誤：'+(data.msg||JSON.stringify(data)),'var(--red)');return;}
-  const fills=data.data?.fill_orders||data.data?.orders||data.data||[];
-  if(!fills.length){setApiStatus('沒有找到歷史成交記錄','var(--text2)');return;}
-  showBingXHistorySelector(Array.isArray(fills)?fills:[]);
+  setApiStatus('🔄 正在取得 BingX 歷史成交…','var(--blue)');
+  const symbols=new Set(['BTC-USDT','ETH-USDT','BNB-USDT','SOL-USDT','XRP-USDT','LINK-USDT','ADA-USDT','DOGE-USDT']);
+  trades.filter(t=>t.exchange==='BingX'&&t.symbol).forEach(t=>symbols.add(t.symbol));
+  const posData=await bingxRequest('/openApi/swap/v2/user/positions');
+  (posData?.data||[]).forEach(p=>{if(p.symbol)symbols.add(p.symbol);});
+  const allFilled=[];
+  for(const sym of symbols){
+    const data=await bingxRequest(`/openApi/swap/v2/trade/allOrders?symbol=${sym}&limit=50`);
+    if(data?.code===0&&data?.data?.orders){
+      const filled=data.data.orders.filter(o=>o.status==='FILLED'&&o.reduceOnly===true&&parseFloat(o.profit||0)!==0);
+      allFilled.push(...filled);
+    }
+  }
+  if(!allFilled.length){setApiStatus('沒有找到 BingX 已出場的成交紀錄','var(--text2)');return;}
+  allFilled.sort((a,b)=>parseInt(b.updateTime||b.time||0)-parseInt(a.updateTime||a.time||0));
+  showBingXHistorySelector(allFilled);
 }
 
 function showBingXHistorySelector(fills){
   window._bxFills=fills;
-  const html=fills.slice(0,20).map((o,i)=>{
-    const sym=(o.symbol||'').replace('-SWAP','');
-    const ts=parseInt(o.time||o.updateTime||Date.now());
+  const html=fills.slice(0,30).map((o,i)=>{
+    const sym=o.symbol||'';
+    const ts=parseInt(o.updateTime||o.time||Date.now());
     const d=new Date(ts);
-    const pnl=parseFloat(o.profit||o.realizedPnl||0);
+    const pnl=parseFloat(o.profit||0);
+    const dir=(o.positionSide==='LONG')?'做多':'做空';
+    const avgPx=parseFloat(o.avgPrice||0);
     return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="importBingXFill(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="display:flex;justify-content:space-between">
         <span style="font-weight:600">${sym}</span>
-        <span style="font-weight:600;color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pnl.toFixed(2)} U</span>
+        <span style="font-weight:600;color:${pnl>=0?'var(--green)':\'var(--red)\'}">${pnl>=0?'+':''}${pnl.toFixed(4)} U</span>
       </div>
-      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ｜ ${d.toTimeString().slice(0,5)} ｜ 成交價：${o.price||o.avgPrice||'—'}</div>
+      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} ｜ ${dir} ｜ 出場均價：${avgPx||'—'}</div>
     </div>`;
   }).join('');
   const ov=document.createElement('div');
   ov.id='bx-hist-sel';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
   ov.onclick=function(e){if(e.target===this)this.remove();};
-  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative">
+  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative;cursor:default">
     <button onclick="document.getElementById('bx-hist-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
-    <div style="font-weight:600;margin-bottom:4px;padding-right:28px">選擇要匯入的歷史成交</div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">匯入後自動建立已出場紀錄</div>${html}
+    <div style="font-weight:600;margin-bottom:4px;padding-right:28px">BingX 歷史成交（${fills.length} 筆）</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">已出場紀錄 — 選擇後自動建立</div>
+    ${html}
     <button onclick="document.getElementById('bx-hist-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
   </div>`;
   document.body.appendChild(ov);
@@ -3162,18 +3178,16 @@ function showBingXHistorySelector(fills){
 window.importBingXFill=function(i){
   document.getElementById('bx-hist-sel')?.remove();
   const o=window._bxFills[i];if(!o)return;
-  const rawSym=o.symbol||'';
-  const sym=rawSym.replace('-SWAP','').replace(/USDT$/,'')+'-USDT';
-  const ts=parseInt(o.time||o.updateTime||Date.now());
+  const sym=o.symbol||'';
+  const ts=parseInt(o.updateTime||o.time||Date.now());
   const d=new Date(ts);
-  const pnl=parseFloat(o.profit||o.realizedPnl||0);
-  const price=parseFloat(o.price||o.avgPrice||0);
-  const qty=parseFloat(o.qty||o.origQty||0);
-  const lev=parseFloat(o.leverage||20);
-  const side=o.side||o.positionSide||'';
-  const dir=(side==='BUY'||side==='LONG')?'做多':'做空';
-  const fee=Math.abs(parseFloat(o.fee||o.commission||0));
-  const xrMap={'TAKE_PROFIT':'止盈 TP1','TAKE_PROFIT_MARKET':'止盈 TP1','STOP':'止損 SL','STOP_MARKET':'止損 SL'};
+  const pnl=parseFloat(o.profit||0);
+  const price=parseFloat(o.avgPrice||0);
+  const fee=Math.abs(parseFloat(o.commission||0));
+  const qty=parseFloat(o.executedQty||o.origQty||0);
+  const lev=parseFloat((o.leverage||'20').toString().replace(/[Xx]/g,''))||20;
+  const dir=(o.positionSide==='LONG')?'做多':'做空';
+  const xrMap={'TAKE_PROFIT_MARKET':'止盈 TP1','TAKE_PROFIT':'止盈 TP1','STOP_MARKET':'止損 SL','STOP':'止損 SL'};
   const t={
     id:Date.now(),
     date:d.toISOString().slice(0,10),
@@ -3182,22 +3196,18 @@ window.importBingXFill=function(i){
     exchange:'BingX',platform:'crypto',ftmoType:'',
     symbol:sym,dir,lev,
     margin:price&&qty&&lev?parseFloat((price*qty/lev).toFixed(2)):0,
-    notional:price*qty,
-    entry:price,exit:price,
+    notional:price*qty,entry:price,exit:price,
     sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,
-    exitReason:o.type||'manual',
-    exitReasonLabel:xrMap[o.type]||'已出場',
+    exitReason:o.type||'manual',exitReasonLabel:xrMap[o.type]||'已出場',
     closePct:1,netPnl:parseFloat(pnl.toFixed(4)),
-    takerRate:0.05,fee,
-    strats:[],tf:'',emotion:'',
-    reason:'（從 BingX 自動匯入）',notes:'',
-    images:[],exitImages:[],
+    takerRate:0.05,fee,strats:[],tf:'',emotion:'',
+    reason:'（從 BingX 自動匯入）',notes:'',images:[],exitImages:[],
     status:'closed',score:null,grade:'—',
     p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,
     p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null
   };
   trades.unshift(t);saveLS();fbSaveTrade(t);
-  setApiStatus(`✅ 已匯入 ${sym} ${dir}（${pnl>=0?'+':''}${pnl.toFixed(2)} U）`,'var(--green)');
+  setApiStatus(`✅ 已匯入 BingX ${sym} ${dir}（${pnl>=0?'+':''}${pnl.toFixed(4)} U）`,'var(--green)');
   showPage('records');
 };
 
