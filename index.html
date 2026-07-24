@@ -3135,7 +3135,11 @@ async function fetchBingXHistory(){
   for(const sym of symbols){
     const data=await bingxRequest(`/openApi/swap/v2/trade/allOrders?symbol=${sym}&limit=50`);
     if(data?.code===0&&data?.data?.orders){
-      const filled=data.data.orders.filter(o=>o.status==='FILLED'&&o.reduceOnly===true&&parseFloat(o.profit||0)!==0);
+      const filled=data.data.orders.filter(o=>
+        o.status==='FILLED'&&
+        (o.reduceOnly===true||o.reduceOnly==='true')&&
+        o.profit!==''&&o.profit!==undefined&&o.profit!==null
+      );
       allFilled.push(...filled);
     }
   }
