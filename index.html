@@ -3157,25 +3157,29 @@ function showBingXHistorySelector(fills){
     const pnl=parseFloat(o.profit||0);
     const dir=(o.positionSide==='LONG')?'做多':'做空';
     const avgPx=parseFloat(o.avgPrice||0);
-    return`<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="importBingXFill(${i})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-      <div style="display:flex;justify-content:space-between">
-        <span style="font-weight:600">${sym}</span>
-        <span style="font-weight:600;color:${pnl>=0?'var(--green)':\'var(--red)\'}">${pnl>=0?'+':''}${pnl.toFixed(4)} U</span>
-      </div>
-      <div style="font-size:11px;color:var(--text2)">${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} ｜ ${dir} ｜ 出場均價：${avgPx||'—'}</div>
-    </div>`;
+    const pnlColor=pnl>=0?'var(--green)':'var(--red)';
+    const pnlStr=(pnl>=0?'+':'')+pnl.toFixed(4)+' U';
+    const avgStr=avgPx||'—';
+    return'<div style="padding:9px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" onclick="importBingXFill('+i+')" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'+
+      '<div style="display:flex;justify-content:space-between">'+
+      '<span style="font-weight:600">'+sym+'</span>'+
+      '<span style="font-weight:600;color:'+pnlColor+'">'+pnlStr+'</span>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+d.toISOString().slice(0,10)+' '+d.toTimeString().slice(0,5)+' ｜ '+dir+' ｜ 出場均價：'+avgStr+'</div>'+
+    '</div>';
   }).join('');
   const ov=document.createElement('div');
   ov.id='bx-hist-sel';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;cursor:pointer';
   ov.onclick=function(e){if(e.target===this)this.remove();};
-  ov.innerHTML=`<div style="background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative;cursor:default">
-    <button onclick="document.getElementById('bx-hist-sel').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>
-    <div style="font-weight:600;margin-bottom:4px;padding-right:28px">BingX 歷史成交（${fills.length} 筆）</div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">已出場紀錄 — 選擇後自動建立</div>
-    ${html}
-    <button onclick="document.getElementById('bx-hist-sel').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>
-  </div>`;
+  const inner=document.createElement('div');
+  inner.style.cssText='background:var(--bg);border-radius:var(--r);padding:18px;max-width:420px;width:90%;max-height:75vh;overflow-y:auto;position:relative;cursor:default';
+  inner.innerHTML='<button onclick="document.getElementById(\'bx-hist-sel\').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);line-height:1;padding:4px">×</button>'+
+    '<div style="font-weight:600;margin-bottom:4px;padding-right:28px">BingX 歷史成交（'+fills.length+' 筆）</div>'+
+    '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">已出場紀錄 — 選擇後自動建立</div>'+
+    html+
+    '<button onclick="document.getElementById(\'bx-hist-sel\').remove()" class="btn" style="width:100%;margin-top:8px">取消</button>';
+  ov.appendChild(inner);
   document.body.appendChild(ov);
 }
 
