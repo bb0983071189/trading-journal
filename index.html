@@ -1010,9 +1010,17 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       <span>📤 填入出場資料</span>
       <button class="modal-close" onclick="closeExitModal()">×</button>
     </div>
-    <div style="background:var(--blue-bg);border:1px solid #bfdbfe;border-radius:var(--rs);padding:9px 12px;margin-bottom:12px;font-size:12px;color:var(--blue)">
+    <div style="background:var(--blue-bg);border:1px solid #bfdbfe;border-radius:var(--rs);padding:9px 12px;margin-bottom:9px;font-size:12px;color:var(--blue)">
       出場後填寫，填完後系統會自動產生評分並更新紀錄。
     </div>
+    <!-- 從交易所帶入按鈕 -->
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="importExitFromExchange()" id="ex-import-btn"
+        style="flex:1;padding:8px;font-size:12px;background:var(--green-bg);color:var(--green);border-color:#6ee7b7;display:flex;align-items:center;justify-content:center;gap:5px">
+        ⚡ 從交易所帶入最新成交
+      </button>
+    </div>
+    <div id="ex-import-status" style="font-size:11px;color:var(--text2);margin-bottom:8px;display:none"></div>
     <div class="g3" style="margin-bottom:9px">
       <div class="f"><label>出場價格</label><input type="number" id="ex-exit" placeholder="0.00" step="any" oninput="calcExitPnl()"></div>
       <div class="f"><label>出場時間</label><input type="time" id="ex-xtime"></div>
@@ -1916,7 +1924,14 @@ function openExitModal(id){
   closeModal();
   document.getElementById('exit-modal').classList.add('show');
 }
-function closeExitModal(){document.getElementById('exit-modal').classList.remove('show');exitingId=null;window._exitTrade=null;}
+function closeExitModal(){
+  document.getElementById('exit-modal').classList.remove('show');
+  document.getElementById('ex-fill-sel')?.remove();
+  setExImportStatus('','');
+  window._importedExitPnl=undefined;
+  window._importedExitFee=undefined;
+  exitingId=null;window._exitTrade=null;
+}
 
 function exqa(qid,val,btn,key){
   const item=document.getElementById(qid);
@@ -1979,15 +1994,22 @@ function saveExitData(){
   const xr=document.getElementById('ex-xr').value;
   const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
 
-  // Calc final PnL
+  // Use imported PnL from exchange if available, otherwise calculate
   let cp=1;
   if(xr==='tp1')cp=t.tpMode===1?1:0.5;
   else if(xr==='tp2')cp=t.tpMode===3?0.75:1;
   const n=t.notional||0,rate=(t.takerRate||0)/100;
-  const cn=n*cp;
-  const gross=t.dir==='做多'?(exit-t.entry)/t.entry*cn:(t.entry-exit)/t.entry*cn;
-  const fee=cn*rate*2;
-  const net=parseFloat((gross-fee).toFixed(4));
+  let net;
+  if(window._importedExitPnl!==undefined){
+    net=parseFloat(window._importedExitPnl.toFixed(4));
+    window._importedExitPnl=undefined;
+    window._importedExitFee=undefined;
+  } else {
+    const cn=n*cp;
+    const gross=t.dir==='做多'?(exit-t.entry)/t.entry*cn:(t.entry-exit)/t.entry*cn;
+    const fee=cn*rate*2;
+    net=parseFloat((gross-fee).toFixed(4));
+  }
 
   // Generate score using stored P1 answers + new exit answers
   const p2Hold=exS.ex_p2Hold,p2Avg=exS.ex_p2Avg,p2TpM=exS.ex_p2TpM,p2Liq=exS.ex_p2Liq,p2Follow=exS.ex_p2Follow;
@@ -2791,7 +2813,130 @@ async function okxRequest(path){
   }catch(e){setApiStatus('OKX API 請求失敗：'+e.message,'var(--red)');return null;}
 }
 
-// ── 統一同步入口 ──
+// ── 從交易所帶入出場成交 ──
+async function importExitFromExchange(){
+  const t=window._exitTrade;
+  if(!t){setExImportStatus('找不到交易資料','var(--red)');return;}
+
+  const btn=document.getElementById('ex-import-btn');
+  if(btn){btn.textContent='⏳ 查詢中…';btn.disabled=true;}
+  setExImportStatus('正在從 '+t.exchange+' 查詢最新成交…','var(--blue)');
+
+  try{
+    let fills=[];
+    if(t.exchange==='BingX'){
+      const data=await bingxRequest('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
+      const orders=data?.data?.orders||[];
+      fills=orders.filter(o=>
+        o.status==='FILLED'&&
+        (o.reduceOnly===true||o.reduceOnly==='true')&&
+        o.profit!==''&&o.profit!==undefined
+      ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
+
+    } else if(t.exchange==='OKX'){
+      const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
+      const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=10&state=filled');
+      fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
+        .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
+    }
+
+    if(!fills.length){
+      setExImportStatus('沒有找到最近的出場成交，請手動填寫','var(--amber)');
+      if(btn){btn.textContent='⚡ 從交易所帶入最新成交';btn.disabled=false;}
+      return;
+    }
+
+    // Show selector if multiple, auto-fill if one
+    if(fills.length===1){
+      applyExitFill(fills[0],t.exchange);
+    } else {
+      showExitFillSelector(fills,t.exchange);
+    }
+  }catch(e){
+    setExImportStatus('查詢失敗：'+e.message,'var(--red)');
+  }
+  if(btn){btn.textContent='⚡ 從交易所帶入最新成交';btn.disabled=false;}
+}
+
+function setExImportStatus(msg,color){
+  const el=document.getElementById('ex-import-status');
+  if(!el)return;
+  el.style.display=msg?'block':'none';
+  el.textContent=msg;
+  el.style.color=color||'var(--text2)';
+}
+
+function showExitFillSelector(fills,exchange){
+  // Remove existing selector
+  document.getElementById('ex-fill-sel')?.remove();
+  const html=fills.slice(0,10).map((o,i)=>{
+    const ts=parseInt(exchange==='BingX'?(o.updateTime||o.time):( o.uTime||o.cTime)||Date.now());
+    const d=new Date(ts);
+    const pnl=parseFloat(exchange==='BingX'?o.profit:o.pnl||0);
+    const price=parseFloat(exchange==='BingX'?o.avgPrice:(o.avgPx||0));
+    const pnlColor=pnl>=0?'var(--green)':'var(--red)';
+    return '<div style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" '+
+      'onclick="applyExitFillIdx('+i+',\''+exchange+'\')" '+
+      'onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
+      '<div style="display:flex;justify-content:space-between">' +
+      '<span style="font-size:12px">'+(d.toISOString().slice(0,10))+' '+(d.toTimeString().slice(0,5))+'</span>' +
+      '<span style="font-weight:700;color:'+pnlColor+'">'+(pnl>=0?'+':'')+pnl.toFixed(4)+' U</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--text2)">出場價：'+price+'</div>' +
+      '</div>';
+  }).join('');
+
+  window._exFills=fills;
+  window._exFillExchange=exchange;
+
+  const sel=document.createElement('div');
+  sel.id='ex-fill-sel';
+  sel.style.cssText='background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:10px;margin-bottom:10px';
+  sel.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px">選擇要帶入的成交紀錄：</div>'+html;
+
+  // Insert before the exit price field
+  const target=document.getElementById('exit-modal').querySelector('.g3');
+  if(target)target.before(sel);
+}
+
+window.applyExitFillIdx=function(i,exchange){
+  document.getElementById('ex-fill-sel')?.remove();
+  applyExitFill(window._exFills[i],exchange);
+};
+
+function applyExitFill(o,exchange){
+  document.getElementById('ex-fill-sel')?.remove();
+  let price,pnl,ts,xrLabel,fee;
+
+  if(exchange==='BingX'){
+    price=parseFloat(o.avgPrice||0);
+    pnl=parseFloat(o.profit||0);
+    fee=Math.abs(parseFloat(o.commission||0));
+    ts=parseInt(o.updateTime||o.time||Date.now());
+    const xrMap={'TAKE_PROFIT_MARKET':'tp1','TAKE_PROFIT':'tp1','STOP_MARKET':'sl','STOP':'sl'};
+    xrLabel=xrMap[o.type]||'manual';
+  } else {
+    price=parseFloat(o.avgPx||0);
+    pnl=parseFloat(o.pnl||0);
+    fee=Math.abs(parseFloat(o.fee||0));
+    ts=parseInt(o.uTime||o.cTime||Date.now());
+    xrLabel='manual';
+  }
+
+  const d=new Date(ts);
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!=='')el.value=v;};
+
+  set('ex-exit',price);
+  set('ex-xtime',d.toTimeString().slice(0,5));
+  if(xrLabel)document.getElementById('ex-xr').value=xrLabel;
+
+  // Store pnl for saveExitData to use
+  window._importedExitPnl=pnl;
+  window._importedExitFee=fee;
+
+  calcExitPnl();
+  setExImportStatus('✅ 已帶入：出場價 '+price+' ｜ 損益 '+(pnl>=0?'+':'')+pnl.toFixed(4)+' U','var(--green)');
+}
 async function syncExchange(exchange){
   if(exchange==='BingX') await syncBingXNow();
   else if(exchange==='OKX') await syncOKXNow();
