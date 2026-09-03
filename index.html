@@ -3104,7 +3104,37 @@ function showOKXHistorySelector(orders){
   document.body.appendChild(ov);
 }
 
-window.importOKXFill=function(i){
+// Detect OKX exit reason using algoId lookup
+async function detectOKXExitReason(o){
+  // Check ordType first
+  if(o.ordType==='conditional'||o.ordType==='oco'){
+    if(parseFloat(o.tpTriggerPx||0)>0) return {reason:'tp1',label:'止盈 TP1'};
+    if(parseFloat(o.slTriggerPx||0)>0) return {reason:'sl',label:'止損 SL'};
+  }
+  // Use algoId to look up algo order
+  const algoId=o.algoId||(o.linkedAlgoOrd&&o.linkedAlgoOrd.algoId)||'';
+  if(algoId&&algoId!=='0'&&algoId!==''){
+    try{
+      const algoData=await okxRequest('/api/v5/trade/orders-algo-history?algoId='+algoId+'&instType=SWAP');
+      const algo=algoData?.data?.[0];
+      if(algo){
+        const tpPx=parseFloat(algo.tpTriggerPx||0);
+        const slPx=parseFloat(algo.slTriggerPx||0);
+        const avgPx=parseFloat(o.avgPx||0);
+        const posSide=o.posSide||'';
+        if(tpPx>0&&slPx>0){
+          if(posSide==='long') return avgPx>=tpPx?{reason:'tp1',label:'止盈 TP1'}:{reason:'sl',label:'止損 SL'};
+          else return avgPx<=tpPx?{reason:'tp1',label:'止盈 TP1'}:{reason:'sl',label:'止損 SL'};
+        }
+        if(tpPx>0) return {reason:'tp1',label:'止盈 TP1'};
+        if(slPx>0) return {reason:'sl',label:'止損 SL'};
+      }
+    }catch(e){console.warn('algo lookup failed',e);}
+  }
+  return {reason:'manual',label:'手動出場'};
+}
+
+window.importOKXFill=async function(i){
   document.getElementById('okx-hist-sel')?.remove();
   const o=window._okxFills[i];if(!o)return;
   const sym=(o.instId||'').replace('-SWAP','').replace('-SWAP-USDT','-USDT');
@@ -3116,6 +3146,9 @@ window.importOKXFill=function(i){
   const dir=o.posSide==='long'?'做多':'做空';
   const sz=parseFloat(o.sz||o.accFillSz||0);
   const lev=parseFloat(o.lever||20);
+  // Detect exit reason
+  setApiStatus('🔍 偵測出場原因…','var(--blue)');
+  const xr=await detectOKXExitReason(o);
   const t={
     id:Date.now(),
     date:d.toISOString().slice(0,10),
@@ -3126,7 +3159,7 @@ window.importOKXFill=function(i){
     lev,margin:0,notional:price*sz,
     entry:price,exit:price,
     sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,
-    exitReason:'manual',exitReasonLabel:'已出場',
+    exitReason:xr.reason,exitReasonLabel:xr.label,
     closePct:1,netPnl:parseFloat(pnl.toFixed(4)),
     takerRate:0.036,fee,
     strats:[],tf:'',emotion:'',
@@ -3137,7 +3170,7 @@ window.importOKXFill=function(i){
     p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null
   };
   trades.unshift(t);saveLS();fbSaveTrade(t);
-  setApiStatus(`✅ 已匯入 OKX ${sym} ${dir}（${pnl>=0?'+':''}${pnl.toFixed(4)} U）`,'var(--green)');
+  setApiStatus('✅ 已匯入 OKX '+sym+' '+dir+'（'+(pnl>=0?'+':'')+pnl.toFixed(4)+' U）｜'+xr.label,'var(--green)');
   showPage('records');
 };
 function setApiStatus(msg,color='var(--text2)'){
