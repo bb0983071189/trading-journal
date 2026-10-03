@@ -1020,11 +1020,25 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       出場後填寫，填完後系統會自動產生評分並更新紀錄。
     </div>
     <!-- 從交易所帶入按鈕 -->
-    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="importExitFromExchange()" id="ex-import-btn"
-        style="flex:1;padding:8px;font-size:12px;background:var(--green-bg);color:var(--green);border-color:#6ee7b7;display:flex;align-items:center;justify-content:center;gap:5px">
-        ⚡ 從交易所帶入最新成交
-      </button>
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:5px">⚡ 從交易所帶入最新成交</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn" onclick="importExitFromExchange('BingX')"
+          style="flex:1;padding:7px 10px;font-size:12px;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
+          ⚡ BingX
+        </button>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:1px;flex:1">
+          <div style="font-size:9px;color:var(--text3);font-weight:700">OP</div>
+          <button class="btn" onclick="importExitFromExchange('BingX2')"
+            style="width:100%;padding:7px 10px;font-size:12px;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
+            ⚡ BingX
+          </button>
+        </div>
+        <button class="btn" onclick="importExitFromExchange('OKX')"
+          style="flex:1;padding:7px 10px;font-size:12px;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd">
+          ⚡ OKX
+        </button>
+      </div>
     </div>
     <div id="ex-import-status" style="font-size:11px;color:var(--text2);margin-bottom:8px;display:none"></div>
     <div class="g3" style="margin-bottom:9px">
@@ -2838,17 +2852,17 @@ async function okxRequest(path){
 }
 
 // ── 從交易所帶入出場成交 ──
-async function importExitFromExchange(){
+async function importExitFromExchange(exchangeOverride){
   const t=window._exitTrade;
   if(!t){setExImportStatus('找不到交易資料','var(--red)');return;}
 
-  const btn=document.getElementById('ex-import-btn');
-  if(btn){btn.textContent='⏳ 查詢中…';btn.disabled=true;}
-  setExImportStatus('正在從 '+t.exchange+' 查詢最新成交…','var(--blue)');
+  // Use specified exchange or fall back to trade's exchange
+  const exchange=exchangeOverride||t.exchange;
+  setExImportStatus('正在從 '+exchange+' 查詢最新成交…','var(--blue)');
 
   try{
     let fills=[];
-    if(t.exchange==='BingX'){
+    if(exchange==='BingX'){
       const data=await bingxRequest('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
       const orders=data?.data?.orders||[];
       fills=orders.filter(o=>
@@ -2857,7 +2871,18 @@ async function importExitFromExchange(){
         o.profit!==''&&o.profit!==undefined
       ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
 
-    } else if(t.exchange==='OKX'){
+    } else if(exchange==='BingX2'){
+      const data=await bingx2Request('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
+      const orders=data?.data?.orders||[];
+      fills=orders.filter(o=>
+        o.status==='FILLED'&&
+        (o.reduceOnly===true||o.reduceOnly==='true')&&
+        o.profit!==''&&o.profit!==undefined
+      ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
+      // Mark fills as BingX for applyExitFill logic
+      fills.forEach(o=>o._fromBingX2=true);
+
+    } else if(exchange==='OKX'){
       const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
       const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=10&state=filled');
       fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
@@ -2865,21 +2890,19 @@ async function importExitFromExchange(){
     }
 
     if(!fills.length){
-      setExImportStatus('沒有找到最近的出場成交，請手動填寫','var(--amber)');
-      if(btn){btn.textContent='⚡ 從交易所帶入最新成交';btn.disabled=false;}
+      setExImportStatus('沒有在 '+exchange+' 找到最近的出場成交，請手動填寫','var(--amber)');
       return;
     }
 
-    // Show selector if multiple, auto-fill if one
+    const exType=(exchange==='OKX')?'OKX':'BingX';
     if(fills.length===1){
-      applyExitFill(fills[0],t.exchange);
+      applyExitFill(fills[0],exType);
     } else {
-      showExitFillSelector(fills,t.exchange);
+      showExitFillSelector(fills,exType);
     }
   }catch(e){
     setExImportStatus('查詢失敗：'+e.message,'var(--red)');
   }
-  if(btn){btn.textContent='⚡ 從交易所帶入最新成交';btn.disabled=false;}
 }
 
 function setExImportStatus(msg,color){
