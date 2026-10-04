@@ -2906,32 +2906,12 @@ async function importExitFromExchange(exchangeOverride){
       fills.forEach(o=>o._fromBingX2=true);
 
     } else if(exchange==='OKX'){
-      // Use positions-history to get realizedPnl (already net after fees)
+      // OKX: orders-history gives pnl(毛利) + fee(手續費，負數)
+      // Also need fills-history to get open order fee
       const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
-      const posData=await okxRequest('/api/v5/account/positions-history?instType=SWAP&instId='+instId+'&limit=10');
-      const positions=posData?.data||[];
-      if(positions.length){
-        // Map positions-history to fill-like objects with realizedPnl
-        fills=positions
-          .filter(p=>p.closeTime||p.uTime)
-          .sort((a,b)=>parseInt(b.closeTime||b.uTime||0)-parseInt(a.closeTime||a.uTime||0))
-          .map(p=>({
-            _isOKXPos:true,
-            avgPx:parseFloat(p.closeAvgPx||p.avgPx||0),
-            realizedPnl:parseFloat(p.realizedPnl||0), // 已實現損益（含手續費）
-            pnl:parseFloat(p.pnl||0),                 // 平倉毛利
-            fee:parseFloat(p.fee||0),                  // 手續費（負數）
-            uTime:p.closeTime||p.uTime,
-            posSide:p.posSide,
-            type:p.type
-          }));
-      }
-      // Fallback to orders-history if positions-history returns nothing
-      if(!fills.length){
-        const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=10&state=filled');
-        fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
-          .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
-      }
+      const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=20&state=filled');
+      fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
+        .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
     }
 
     if(!fills.length){
@@ -2939,19 +2919,53 @@ async function importExitFromExchange(exchangeOverride){
       return;
     }
 
-    // For BingX: also fetch open orders to get open commission
+    // For BingX: use positions-history to get realizedPnl (已實現盈虧，含開+平倉手續費)
     if(exchange==='BingX'||exchange==='BingX2'){
       const reqFn=exchange==='BingX2'?bingx2Request:bingxRequest;
-      const allData=await reqFn('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=50');
-      const allOrders=allData?.data?.orders||[];
-      // Find open orders (not reduceOnly) to sum their commissions
-      const openOrders=allOrders.filter(o=>
-        o.status==='FILLED'&&
-        !(o.reduceOnly===true||o.reduceOnly==='true')
-      );
-      // Attach all open commissions to each fill for later use
+      // Try to fetch position history for realizedPnl
+      const posData=await reqFn('/openApi/swap/v2/trade/positionHistory?symbol='+t.symbol+'&limit=10');
+      const posList=posData?.data?.positionHistory||posData?.data||[];
+      // Match each fill to its position by time proximity
       fills.forEach(fill=>{
-        fill._openCommission=openOrders.reduce((sum,oo)=>sum+Math.abs(parseFloat(oo.commission||0)),0);
+        const fillTime=parseInt(fill.updateTime||fill.time||0);
+        const matchPos=posList.find(p=>{
+          const closeTime=parseInt(p.closeTime||p.updateTime||0);
+          return Math.abs(closeTime-fillTime)<300000; // within 5 min
+        });
+        if(matchPos&&matchPos.realizedPnl!==undefined){
+          fill._realizedPnl=parseFloat(matchPos.realizedPnl); // 已實現盈虧（含開+平手續費）
+        } else {
+          // Fallback: fetch all orders to sum open commission
+          fill._openCommission=undefined; // will fetch below
+        }
+      });
+      // For fills without position match, fetch open orders commission
+      const needOpenFee=fills.some(f=>f._realizedPnl===undefined);
+      if(needOpenFee){
+        const allData=await reqFn('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=50');
+        const allOrders=allData?.data?.orders||[];
+        const openOrders=allOrders.filter(o=>
+          o.status==='FILLED'&&
+          !(o.reduceOnly===true||o.reduceOnly==='true')
+        );
+        const totalOpenFee=openOrders.reduce((sum,oo)=>sum+Math.abs(parseFloat(oo.commission||0)),0);
+        fills.forEach(fill=>{
+          if(fill._realizedPnl===undefined) fill._openCommission=totalOpenFee;
+        });
+      }
+    }
+
+    // For OKX: fetch fills-history to get open order fee too
+    if(exchange==='OKX'){
+      const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
+      const fillsData=await okxRequest('/api/v5/trade/fills-history?instType=SWAP&instId='+instId+'&limit=20');
+      const allFills=fillsData?.data||[];
+      fills.forEach(fill=>{
+        // Find open fill (side opposite to close) near same position
+        const closeFee=Math.abs(parseFloat(fill.fee||0));
+        const openFills=allFills.filter(f=>parseFloat(f.fee||0)!==0&&f.ordId!==fill.ordId);
+        const openFee=openFills.slice(0,1).reduce((sum,f)=>sum+Math.abs(parseFloat(f.fee||0)),0);
+        fill._openFee=openFee;
       });
     }
 
@@ -3018,32 +3032,33 @@ function applyExitFill(o,exchange){
 
   if(exchange==='BingX'){
     price=parseFloat(o.avgPrice||0);
-    gross=parseFloat(o.profit||0);          // 毛利（未扣手續費）
-    closeFee=Math.abs(parseFloat(o.commission||0)); // 平倉手續費
-    openFee=parseFloat(o._openCommission||0);       // 開倉手續費（另行查詢）
-    totalFee=closeFee+openFee;
-    netPnl=gross-totalFee;                  // 淨損益 = 毛利 - 開倉手續費 - 平倉手續費
+    gross=parseFloat(o.profit||0);                   // 平倉毛利
+    closeFee=Math.abs(parseFloat(o.commission||0));  // 平倉手續費
     ts=parseInt(o.updateTime||o.time||Date.now());
     const xrMap={'TAKE_PROFIT_MARKET':'tp1','TAKE_PROFIT':'tp1','STOP_MARKET':'sl','STOP':'sl'};
     xrLabel=xrMap[o.type]||'manual';
+    if(o._realizedPnl!==undefined){
+      // 直接用倉位歷史的已實現盈虧（含開+平倉手續費）
+      netPnl=o._realizedPnl;
+      openFee=Math.abs(netPnl-(gross-closeFee)); // 反推開倉手續費供顯示用
+      totalFee=closeFee+openFee;
+    } else {
+      // Fallback: profit - closeFee - openCommission
+      openFee=parseFloat(o._openCommission||0);
+      totalFee=closeFee+openFee;
+      netPnl=gross-totalFee;
+    }
   } else {
-    // OKX
+    // OKX: pnl=平倉毛利, fee=平倉手續費（負數），_openFee=開倉手續費
     price=parseFloat(o.avgPx||0);
+    gross=parseFloat(o.pnl||0);
+    const closeFeeRaw=parseFloat(o.fee||0);          // 負數
+    closeFee=Math.abs(closeFeeRaw);
+    openFee=parseFloat(o._openFee||0);
+    totalFee=closeFee+openFee;
+    netPnl=gross-totalFee;                            // 淨損益 = 毛利 - 開倉手續費 - 平倉手續費
     ts=parseInt(o.uTime||o.cTime||Date.now());
     xrLabel='manual';
-    if(o._isOKXPos&&o.realizedPnl!==undefined){
-      // positions-history: realizedPnl = 已實現損益（含手續費，直接使用）
-      gross=parseFloat(o.pnl||0);
-      const feeRaw=parseFloat(o.fee||0);
-      totalFee=Math.abs(feeRaw);
-      netPnl=parseFloat(o.realizedPnl||0); // 直接用已實現損益
-    } else {
-      // orders-history fallback: pnl=毛利, fee=手續費（負數）
-      gross=parseFloat(o.pnl||0);
-      const feeRaw=parseFloat(o.fee||0);
-      totalFee=Math.abs(feeRaw);
-      netPnl=gross+feeRaw;
-    }
   }
 
   const d=new Date(ts);
@@ -3065,14 +3080,8 @@ function applyExitFill(o,exchange){
   if(calcBox&&grossEl&&feeEl&&netEl){
     calcBox.style.display='block';
     const src=exchange==='OKX'?'OKX':'BingX';
-    if(exchange==='OKX'&&o&&o._isOKXPos){
-      // positions-history: show realizedPnl directly
-      grossEl.textContent='平倉毛利 '+(gross>=0?'+':'')+gross.toFixed(4)+' USDT';
-      feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（手續費）':'—';
-    } else {
-      grossEl.textContent='平倉毛利 '+(gross>=0?'+':'')+gross.toFixed(4)+' USDT（'+src+'）';
-      feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（開+平倉手續費）':'—';
-    }
+    grossEl.textContent='平倉毛利 '+(gross>=0?'+':'')+gross.toFixed(4)+' USDT';
+    feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（開+平倉手續費）':'—';
     netEl.textContent=(netPnl>=0?'+':'')+netPnl.toFixed(4)+' USDT';
     netEl.style.color=netPnl>=0?'var(--green)':'var(--red)';
   }
