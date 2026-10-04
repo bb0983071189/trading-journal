@@ -1050,7 +1050,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     </div>
     <div id="ex-import-status" style="font-size:11px;color:var(--text2);margin-bottom:8px;display:none"></div>
     <div class="g3" style="margin-bottom:9px">
-      <div class="f"><label>出場價格</label><input type="number" id="ex-exit" placeholder="0.00" step="any" oninput="calcExitPnl()"></div>
+      <div class="f"><label>出場價格</label><input type="number" id="ex-exit" placeholder="0.00" step="any" oninput="window._importedExitPnl=undefined;calcExitPnl()"></div>
       <div class="f"><label>出場時間</label><input type="time" id="ex-xtime"></div>
       <div class="f"><label>出場原因</label>
         <select id="ex-xr" onchange="calcExitPnl()">
@@ -1984,6 +1984,8 @@ function exqa(qid,val,btn,key){
 }
 
 function calcExitPnl(){
+  // If we have an imported PnL from API, don't overwrite it
+  if(window._importedExitPnl!==undefined)return;
   const t=window._exitTrade;if(!t)return;
   const exit=parseFloat(document.getElementById('ex-exit').value)||0;
   const xr=document.getElementById('ex-xr').value;
@@ -3009,10 +3011,10 @@ function applyExitFill(o,exchange){
   const netEl=document.getElementById('ex-net');
   if(calcBox&&grossEl&&feeEl&&netEl){
     calcBox.style.display='block';
-    // Show source label
     const src=exchange==='OKX'?'OKX':'BingX';
-    grossEl.textContent='（由 '+src+' API 直接提供）';
-    feeEl.textContent=fee>0?'-'+fee.toFixed(4)+' USDT':'—';
+    // API profit is already NET (after fees), display directly
+    grossEl.textContent='（來自 '+src+' API，已含手續費）';
+    feeEl.textContent=fee>0?'-'+fee.toFixed(4)+' USDT（已含於損益中）':'—';
     netEl.textContent=(pnl>=0?'+':'')+pnl.toFixed(4)+' USDT';
     netEl.style.color=pnl>=0?'var(--green)':'var(--red)';
   }
