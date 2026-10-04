@@ -810,6 +810,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <button class="plat-tab on" onclick="setRecPlat(this,'all')">全部平台</button>
     <button class="plat-tab" onclick="setRecPlat(this,'OKX')">OKX</button>
     <button class="plat-tab" onclick="setRecPlat(this,'BingX')">BingX</button>
+    <button class="plat-tab" onclick="setRecPlat(this,'BingX2')">BingX (OP)</button>
   </div>
   <div class="rec-filters">
     <button class="fc on" onclick="setF(this,'all')">全部</button>
@@ -831,6 +832,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <button class="plat-tab on" onclick="setRepPlat(this,'all')">全部平台</button>
     <button class="plat-tab" onclick="setRepPlat(this,'OKX')">OKX</button>
     <button class="plat-tab" onclick="setRepPlat(this,'BingX')">BingX</button>
+    <button class="plat-tab" onclick="setRepPlat(this,'BingX2')">BingX (OP)</button>
   </div>
   <div class="rec-filters" id="rep-time-filters">
     <button class="fc on" onclick="setRF(this,'all')">全部</button>
@@ -936,9 +938,15 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px">
       <div class="f"><label>日期</label><input type="date" id="e-date"></div>
       <div class="f"><label>平台</label>
-        <select id="e-exchange">
+        <select id="e-exchange" onchange="updateEditAccountOptions()">
           <option value="OKX">OKX</option>
           <option value="BingX">BingX</option>
+        </select>
+      </div>
+      <div class="f" id="e-account-field" style="display:none"><label>帳號</label>
+        <select id="e-account">
+          <option value="">主帳號</option>
+          <option value="OP">OP 帳號</option>
         </select>
       </div>
       <div class="f"><label>代號</label><input type="text" id="e-sym" placeholder="BTC-USDT…"></div>
@@ -1806,6 +1814,8 @@ function openEditModal(id){
   const set=(el,v)=>{const e=document.getElementById(el);if(e)e.value=v||'';};
   set('e-date',t.date);
   document.getElementById('e-exchange').value=t.exchange||'OKX';
+  updateEditAccountOptions();
+  document.getElementById('e-account').value=t.isOP?'OP':'';
   set('e-sym',t.symbol);
   document.getElementById('e-dir').value=t.dir||'做多';
   set('e-lev',t.lev);
@@ -1825,6 +1835,12 @@ function openEditModal(id){
   closeModal();
   document.getElementById('edit-modal').classList.add('show');
 }
+function updateEditAccountOptions(){
+  const ex=document.getElementById('e-exchange')?.value;
+  const field=document.getElementById('e-account-field');
+  if(field)field.style.display=ex==='BingX'?'flex':'none';
+}
+
 function closeEditModal(){
   document.getElementById('edit-modal').classList.remove('show');
   editingId=null;editImgEntry=[];editImgExit=[];
@@ -1841,6 +1857,7 @@ function saveEdit(){
     ...trades[idx],
     date:get('e-date'),
     exchange:get('e-exchange'),
+    isOP:get('e-exchange')==='BingX'&&document.getElementById('e-account')?.value==='OP',
     symbol:get('e-sym').toUpperCase(),
     dir:get('e-dir'),
     lev:getN('e-lev'),
@@ -1907,7 +1924,7 @@ function saveEntryNow(){
     id:Date.now(),
     date:gv('p1-date')||new Date().toISOString().slice(0,10),
     etime:gv('p1-etime'),
-    exchange:S.exchange,platform:S.platform,ftmoType:S.ftmoType||'',
+    exchange:S.exchange==='BingX2'?'BingX':S.exchange,platform:S.platform,ftmoType:S.ftmoType||'',isOP:S.exchange==='BingX2'||S.isOP||false,
     symbol:gv('p1-sym'),dir:S.dir,lev:S.lev,margin:S.margin,
     notional:S.notional,entry:S.entry,sl:S.sl,tp1:S.tp1,tp2:S.tp2,tp3:S.tp3,
     tpMode:S.tpMode,takerRate:S.takerRate,
@@ -2173,7 +2190,7 @@ function resetForm(){
   document.getElementById('label-notional').textContent='名目倉位（自動）';
   document.getElementById('lev-field').style.opacity='1';
   document.getElementById('liq-field').style.display='';
-  Object.assign(S,{exchange:'',platform:'crypto',takerRate:0,ftmoType:'',emotion:'',strats:[],dir:'',lev:20,margin:0,notional:0,entry:0,sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,exit:0,closePct:1,netPnl:0,score:0,p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null});
+  Object.assign(S,{exchange:'',platform:'crypto',takerRate:0,ftmoType:'',isOP:false,emotion:'',strats:[],dir:'',lev:20,margin:0,notional:0,entry:0,sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,exit:0,closePct:1,netPnl:0,score:0,p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null});
   [1,2,3].forEach(i=>{sv('pd'+i,i);document.getElementById('pd'+i).className='ph-dot '+(i===1?'dot-active':'dot-idle');});
   document.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));
   updateStratGrid();
@@ -2184,7 +2201,11 @@ function resetForm(){
 function filterT(list,f,plat){
   const now=Date.now();
   let result=list;
-  if(plat&&plat!=='all')result=result.filter(t=>t.exchange===plat);
+  if(plat&&plat!=='all'){
+    if(plat==='BingX2') result=result.filter(t=>t.exchange==='BingX'&&t.isOP===true);
+    else if(plat==='BingX') result=result.filter(t=>t.exchange==='BingX'&&!t.isOP);
+    else result=result.filter(t=>t.exchange===plat);
+  }
   if(f==='7d')return result.filter(t=>now-new Date(t.date).getTime()<7*864e5);
   if(f==='30d')return result.filter(t=>now-new Date(t.date).getTime()<30*864e5);
   if(f==='win')return result.filter(t=>t.netPnl>0);
@@ -2207,7 +2228,7 @@ function renderRec(){
       <div class="rec-top">
         <span class="rec-sym">${t.symbol||'—'}</span>
         <span class="rd ${t.dir==='做多'?'dl':'ds'}">${t.dir||'—'}</span>
-        <span class="rec-ex">${exLabel||'—'}</span>
+        <span class="rec-ex">${exLabel||'—'}</span>${t.isOP?'<span style="font-size:9px;padding:1px 5px;border-radius:999px;background:#fef3c7;color:#92400e;font-weight:700;border:1px solid #fcd34d">OP</span>':''}
         ${isOpen?'<span class="badge-open">🟡 持倉中</span>':`<span class="gb g${t.grade||'D'}">${t.grade||'D'}</span>`}
         ${imgCount?`<span style="font-size:10px;color:var(--text3)">📸 ${imgCount}</span>`:''}
         <span class="rec-date">${t.date||'—'}</span>
@@ -3386,6 +3407,7 @@ function fillFromBingXPosition(p){
 
   // Set BingX as exchange and recalculate
   selEx('BingX','crypto',0.05);
+  S.isOP=p._isBingX2||false;
   calcAll();
 
   const tpInfo=tp1>0?`TP${tp2>0?tp3>0?'1/2/3':'1/2':'1'}已填`:'無TP';
