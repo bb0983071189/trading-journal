@@ -2906,10 +2906,32 @@ async function importExitFromExchange(exchangeOverride){
       fills.forEach(o=>o._fromBingX2=true);
 
     } else if(exchange==='OKX'){
+      // Use positions-history to get realizedPnl (already net after fees)
       const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
-      const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=10&state=filled');
-      fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
-        .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
+      const posData=await okxRequest('/api/v5/account/positions-history?instType=SWAP&instId='+instId+'&limit=10');
+      const positions=posData?.data||[];
+      if(positions.length){
+        // Map positions-history to fill-like objects with realizedPnl
+        fills=positions
+          .filter(p=>p.closeTime||p.uTime)
+          .sort((a,b)=>parseInt(b.closeTime||b.uTime||0)-parseInt(a.closeTime||a.uTime||0))
+          .map(p=>({
+            _isOKXPos:true,
+            avgPx:parseFloat(p.closeAvgPx||p.avgPx||0),
+            realizedPnl:parseFloat(p.realizedPnl||0), // 已實現損益（含手續費）
+            pnl:parseFloat(p.pnl||0),                 // 平倉毛利
+            fee:parseFloat(p.fee||0),                  // 手續費（負數）
+            uTime:p.closeTime||p.uTime,
+            posSide:p.posSide,
+            type:p.type
+          }));
+      }
+      // Fallback to orders-history if positions-history returns nothing
+      if(!fills.length){
+        const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=10&state=filled');
+        fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
+          .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
+      }
     }
 
     if(!fills.length){
@@ -3005,14 +3027,23 @@ function applyExitFill(o,exchange){
     const xrMap={'TAKE_PROFIT_MARKET':'tp1','TAKE_PROFIT':'tp1','STOP_MARKET':'sl','STOP':'sl'};
     xrLabel=xrMap[o.type]||'manual';
   } else {
-    // OKX: pnl=毛利, fee=手續費（負數）
+    // OKX
     price=parseFloat(o.avgPx||0);
-    gross=parseFloat(o.pnl||0);
-    const feeRaw=parseFloat(o.fee||0);    // OKX fee is negative
-    totalFee=Math.abs(feeRaw);
-    netPnl=gross+feeRaw;                  // 淨損益 = 毛利 + fee（fee已是負數）
     ts=parseInt(o.uTime||o.cTime||Date.now());
     xrLabel='manual';
+    if(o._isOKXPos&&o.realizedPnl!==undefined){
+      // positions-history: realizedPnl = 已實現損益（含手續費，直接使用）
+      gross=parseFloat(o.pnl||0);
+      const feeRaw=parseFloat(o.fee||0);
+      totalFee=Math.abs(feeRaw);
+      netPnl=parseFloat(o.realizedPnl||0); // 直接用已實現損益
+    } else {
+      // orders-history fallback: pnl=毛利, fee=手續費（負數）
+      gross=parseFloat(o.pnl||0);
+      const feeRaw=parseFloat(o.fee||0);
+      totalFee=Math.abs(feeRaw);
+      netPnl=gross+feeRaw;
+    }
   }
 
   const d=new Date(ts);
@@ -3034,8 +3065,14 @@ function applyExitFill(o,exchange){
   if(calcBox&&grossEl&&feeEl&&netEl){
     calcBox.style.display='block';
     const src=exchange==='OKX'?'OKX':'BingX';
-    grossEl.textContent=(gross>=0?'+':'')+gross.toFixed(4)+' USDT（'+src+' 毛利）';
-    feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（手續費）':'—';
+    if(exchange==='OKX'&&o&&o._isOKXPos){
+      // positions-history: show realizedPnl directly
+      grossEl.textContent='平倉毛利 '+(gross>=0?'+':'')+gross.toFixed(4)+' USDT';
+      feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（手續費）':'—';
+    } else {
+      grossEl.textContent='平倉毛利 '+(gross>=0?'+':'')+gross.toFixed(4)+' USDT（'+src+'）';
+      feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（開+平倉手續費）':'—';
+    }
     netEl.textContent=(netPnl>=0?'+':'')+netPnl.toFixed(4)+' USDT';
     netEl.style.color=netPnl>=0?'var(--green)':'var(--red)';
   }
