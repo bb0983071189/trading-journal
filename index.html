@@ -2998,11 +2998,24 @@ function applyExitFill(o,exchange){
   set('ex-xtime',d.toTimeString().slice(0,5));
   if(xrLabel)document.getElementById('ex-xr').value=xrLabel;
 
-  // Store pnl for saveExitData to use
+  // Store pnl from API for saveExitData to use
   window._importedExitPnl=pnl;
   window._importedExitFee=fee;
 
-  calcExitPnl();
+  // Show API PnL directly in calc box
+  const calcBox=document.getElementById('ex-calc-box');
+  const grossEl=document.getElementById('ex-gross');
+  const feeEl=document.getElementById('ex-fee-display');
+  const netEl=document.getElementById('ex-net');
+  if(calcBox&&grossEl&&feeEl&&netEl){
+    calcBox.style.display='block';
+    // Show source label
+    const src=exchange==='OKX'?'OKX':'BingX';
+    grossEl.textContent='（由 '+src+' API 直接提供）';
+    feeEl.textContent=fee>0?'-'+fee.toFixed(4)+' USDT':'—';
+    netEl.textContent=(pnl>=0?'+':'')+pnl.toFixed(4)+' USDT';
+    netEl.style.color=pnl>=0?'var(--green)':'var(--red)';
+  }
   setExImportStatus('✅ 已帶入：出場價 '+price+' ｜ 損益 '+(pnl>=0?'+':'')+pnl.toFixed(4)+' U','var(--green)');
 }
 async function syncExchange(exchange){
