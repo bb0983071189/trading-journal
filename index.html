@@ -2917,6 +2917,22 @@ async function importExitFromExchange(exchangeOverride){
       return;
     }
 
+    // For BingX: also fetch open orders to get open commission
+    if(exchange==='BingX'||exchange==='BingX2'){
+      const reqFn=exchange==='BingX2'?bingx2Request:bingxRequest;
+      const allData=await reqFn('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=50');
+      const allOrders=allData?.data?.orders||[];
+      // Find open orders (not reduceOnly) to sum their commissions
+      const openOrders=allOrders.filter(o=>
+        o.status==='FILLED'&&
+        !(o.reduceOnly===true||o.reduceOnly==='true')
+      );
+      // Attach all open commissions to each fill for later use
+      fills.forEach(fill=>{
+        fill._openCommission=openOrders.reduce((sum,oo)=>sum+Math.abs(parseFloat(oo.commission||0)),0);
+      });
+    }
+
     const exType=(exchange==='OKX')?'OKX':'BingX';
     if(fills.length===1){
       applyExitFill(fills[0],exType);
@@ -2976,19 +2992,25 @@ window.applyExitFillIdx=function(i,exchange){
 
 function applyExitFill(o,exchange){
   document.getElementById('ex-fill-sel')?.remove();
-  let price,pnl,ts,xrLabel,fee;
+  let price,gross,netPnl,ts,xrLabel,closeFee=0,openFee=0,totalFee=0;
 
   if(exchange==='BingX'){
     price=parseFloat(o.avgPrice||0);
-    pnl=parseFloat(o.profit||0);
-    fee=Math.abs(parseFloat(o.commission||0));
+    gross=parseFloat(o.profit||0);          // 毛利（未扣手續費）
+    closeFee=Math.abs(parseFloat(o.commission||0)); // 平倉手續費
+    openFee=parseFloat(o._openCommission||0);       // 開倉手續費（另行查詢）
+    totalFee=closeFee+openFee;
+    netPnl=gross-totalFee;                  // 淨損益 = 毛利 - 開倉手續費 - 平倉手續費
     ts=parseInt(o.updateTime||o.time||Date.now());
     const xrMap={'TAKE_PROFIT_MARKET':'tp1','TAKE_PROFIT':'tp1','STOP_MARKET':'sl','STOP':'sl'};
     xrLabel=xrMap[o.type]||'manual';
   } else {
+    // OKX: pnl=毛利, fee=手續費（負數）
     price=parseFloat(o.avgPx||0);
-    pnl=parseFloat(o.pnl||0);
-    fee=Math.abs(parseFloat(o.fee||0));
+    gross=parseFloat(o.pnl||0);
+    const feeRaw=parseFloat(o.fee||0);    // OKX fee is negative
+    totalFee=Math.abs(feeRaw);
+    netPnl=gross+feeRaw;                  // 淨損益 = 毛利 + fee（fee已是負數）
     ts=parseInt(o.uTime||o.cTime||Date.now());
     xrLabel='manual';
   }
@@ -3000,11 +3022,11 @@ function applyExitFill(o,exchange){
   set('ex-xtime',d.toTimeString().slice(0,5));
   if(xrLabel)document.getElementById('ex-xr').value=xrLabel;
 
-  // Store pnl from API for saveExitData to use
-  window._importedExitPnl=pnl;
-  window._importedExitFee=fee;
+  // Store net pnl from API for saveExitData to use
+  window._importedExitPnl=netPnl;
+  window._importedExitFee=totalFee;
 
-  // Show API PnL directly in calc box
+  // Show breakdown in calc box
   const calcBox=document.getElementById('ex-calc-box');
   const grossEl=document.getElementById('ex-gross');
   const feeEl=document.getElementById('ex-fee-display');
@@ -3012,13 +3034,12 @@ function applyExitFill(o,exchange){
   if(calcBox&&grossEl&&feeEl&&netEl){
     calcBox.style.display='block';
     const src=exchange==='OKX'?'OKX':'BingX';
-    // API profit is already NET (after fees), display directly
-    grossEl.textContent='（來自 '+src+' API，已含手續費）';
-    feeEl.textContent=fee>0?'-'+fee.toFixed(4)+' USDT（已含於損益中）':'—';
-    netEl.textContent=(pnl>=0?'+':'')+pnl.toFixed(4)+' USDT';
-    netEl.style.color=pnl>=0?'var(--green)':'var(--red)';
+    grossEl.textContent=(gross>=0?'+':'')+gross.toFixed(4)+' USDT（'+src+' 毛利）';
+    feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（手續費）':'—';
+    netEl.textContent=(netPnl>=0?'+':'')+netPnl.toFixed(4)+' USDT';
+    netEl.style.color=netPnl>=0?'var(--green)':'var(--red)';
   }
-  setExImportStatus('✅ 已帶入：出場價 '+price+' ｜ 損益 '+(pnl>=0?'+':'')+pnl.toFixed(4)+' U','var(--green)');
+  setExImportStatus('✅ 已帶入：出場價 '+price+' ｜ 淨損益 '+(netPnl>=0?'+':'')+netPnl.toFixed(4)+' U','var(--green)');
 }
 async function syncExchange(exchange){
   if(exchange==='BingX') await syncBingXNow();
