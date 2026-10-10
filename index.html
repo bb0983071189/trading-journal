@@ -2798,7 +2798,9 @@ function exportNotionReport(){
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151">${t.entry||'—'}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151">${t.exit||'—'}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#ef4444">${t.sl||'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e">${[t.tp1,t.tp2,t.tp3].filter(Boolean).join('/')||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e">${t.tp1||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e">${t.tp2||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e">${t.tp3||'—'}</td>
       <td style="padding:11px 12px;text-align:center">${tag(xrLabelMap(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151">${strats}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151">${t.tf||'—'}</td>
@@ -2839,7 +2841,9 @@ function exportNotionReport(){
             <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">進場價</th>
             <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">出場價</th>
             <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">止損</th>
-            <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">TP</th>
+            <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">TP1</th>
+            <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">TP2</th>
+            <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">TP3</th>
             <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">出場原因</th>
             <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">策略</th>
             <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;text-align:center;white-space:nowrap">週期</th>
