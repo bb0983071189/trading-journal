@@ -1125,6 +1125,10 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 </div>
 
 <script>
+// ── Cloudflare Worker URL ──
+const WORKER_URL = localStorage.getItem('worker_url') || 'https://trading-api-proxy.bb0983071189.workers.dev';
+window._workerUrl = WORKER_URL;
+
 // ===== FTMO FEE RULES =====
 // Based on FTMO commission structure (per lot, round-trip)
 // Forex pairs: $3/lot round-trip (approx $1.5/lot per side × 100,000 notional)
@@ -3000,19 +3004,20 @@ function _exportNotionReportWithList(list){
     const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
     const gradeColor=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
-    // 風報比 R:R = (entry→tp1) / (entry→sl)
+    // 風報比 = 實際獲利幅度 ÷ 止損幅度 (以價格計)
     const rrCalc=(()=>{
-      const ep=parseFloat(t.entry);const sl=parseFloat(t.sl);
-      // Use best TP available (tp1 first, then tp2, tp3)
-      const tp=parseFloat(t.tp1||t.tp2||t.tp3);
-      if(!ep||!sl||!tp||isNaN(ep)||isNaN(sl)||isNaN(tp))return null;
+      const ep=parseFloat(t.entry);const sl=parseFloat(t.sl);const ex=parseFloat(t.exit);
+      if(!ep||!sl||!ex||isNaN(ep)||isNaN(sl)||isNaN(ex))return null;
       const risk=Math.abs(ep-sl);
-      const reward=Math.abs(tp-ep);
       if(risk===0)return null;
+      const reward=Math.abs(ex-ep);
       return reward/risk;
     })();
-    const rrStr=rrCalc!==null?'1 : '+rrCalc.toFixed(2):'—';
-    const rrColor=rrCalc===null?'#9ca3af':rrCalc>=2?'#16a34a':rrCalc>=1?'#d97706':'#ef4444';
+    // Determine sign: if netPnl < 0 it's a loss → show negative R
+    const rrSign=(t.netPnl||0)<0?-1:1;
+    const rrVal=rrCalc!==null?rrSign*rrCalc:null;
+    const rrStr=rrVal!==null?(rrVal>=0?'+':'')+rrVal.toFixed(2)+'R':'—';
+    const rrColor=rrVal===null?'#9ca3af':rrVal>0?'#16a34a':'#ef4444';
     return`<tr class="rpt-row" data-rpt-idx="${i}" style="cursor:pointer;border-bottom:1px solid #f3f4f6">
       <td style="padding:11px 12px">
         <div style="font-weight:700;font-size:14px;color:#111">${t.symbol||'—'}</div>
@@ -3183,7 +3188,7 @@ function rptShowDetail(idx){
         ${prop('週期',esc(t.tf||'—'))}
         ${prop('情緒',esc(t.emotion||'—'))}
         ${prop('評分','<span style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</span>')}
-        ${prop('風報比',(()=>{const ep=parseFloat(t.entry),sl=parseFloat(t.sl),tp=parseFloat(t.tp1||t.tp2||t.tp3);if(!ep||!sl||!tp||isNaN(ep)||isNaN(sl)||isNaN(tp))return'—';const r=Math.abs(ep-sl),w=Math.abs(tp-ep);if(!r)return'—';const v=w/r;const c=v>=2?'#16a34a':v>=1?'#d97706':'#ef4444';return'<span style="color:'+c+';font-weight:700">1 : '+v.toFixed(2)+'</span>';})()} ）
+        ${prop('風報比',(()=>{const ep=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(t.exit);if(!ep||!sl||!ex||isNaN(ep)||isNaN(sl)||isNaN(ex))return'—';const r=Math.abs(ep-sl),w=Math.abs(ex-ep);if(!r)return'—';const v=w/r;const sign=(t.netPnl||0)<0?-1:1;const rv=sign*v;const c=rv>0?'#16a34a':'#ef4444';return'<span style="color:'+c+';font-weight:700">'+(rv>=0?'+':'')+rv.toFixed(2)+'R</span>'; })()  )}
       </table>
       ${section('📷','進場截圖',photoGrid(t.images))}
       ${section('📷','出場截圖',photoGrid(t.exitImages))}
@@ -3330,10 +3335,7 @@ function loadApiKeys(){
   if(wInput)wInput.value=wu;
 
 }
-// ── Cloudflare Worker URL ──
-// 部署 Worker 後填入你的 Worker URL，存在 localStorage
-const WORKER_URL = localStorage.getItem('worker_url') || 'https://trading-api-proxy.bb0983071189.workers.dev';
-window._workerUrl = WORKER_URL;
+// WORKER_URL moved to top of script
 
 function getApiKeys(){
   return{
@@ -4268,7 +4270,7 @@ if(window._fbReady){
           ${prop('策略',esc(strats))}
           ${prop('週期',esc(t.tf||'—'))}
           ${prop('評分','<span style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</span>')}
-        ${prop('風報比',(()=>{const ep=parseFloat(t.entry),sl=parseFloat(t.sl),tp=parseFloat(t.tp1||t.tp2||t.tp3);if(!ep||!sl||!tp||isNaN(ep)||isNaN(sl)||isNaN(tp))return'—';const r=Math.abs(ep-sl),w=Math.abs(tp-ep);if(!r)return'—';const v=w/r;const c=v>=2?'#16a34a':v>=1?'#d97706':'#ef4444';return'<span style="color:'+c+';font-weight:700">1 : '+v.toFixed(2)+'</span>';})()} ）
+        ${prop('風報比',(()=>{const ep=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(t.exit);if(!ep||!sl||!ex||isNaN(ep)||isNaN(sl)||isNaN(ex))return'—';const r=Math.abs(ep-sl),w=Math.abs(ex-ep);if(!r)return'—';const v=w/r;const sign=(t.netPnl||0)<0?-1:1;const rv=sign*v;const c=rv>0?'#16a34a':'#ef4444';return'<span style="color:'+c+';font-weight:700">'+(rv>=0?'+':'')+rv.toFixed(2)+'R</span>'; })()  )}
         </table>
         ${section('📷','進場截圖',photoGrid(t.images))}
         ${section('📷','出場截圖',photoGrid(t.exitImages))}
