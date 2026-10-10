@@ -2760,7 +2760,6 @@ function exportNotionReport(){
   const wins=list.filter(t=>(t.netPnl||0)>0).length;
   const wr=list.length?Math.round(wins/list.length*100):0;
 
-  // Serialize trade data into JS for the detail panel
   const tradesJson=JSON.stringify(list.map(t=>({
     id:t.id,symbol:t.symbol,date:t.date,etime:t.etime,xtime:t.xtime,
     dir:t.dir,exchange:t.exchange,isOP:t.isOP,lev:t.lev,
@@ -2777,7 +2776,7 @@ function exportNotionReport(){
     const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const pnl=t.netPnl||0;
     const gradeColor=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
-    return`<tr class="trade-row" data-idx="${i}" style="cursor:pointer;background:${i%2===0?'#fff':'#f9fafb'};transition:background .15s" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${i%2===0?'#fff':'#f9fafb'}'" onclick="openDetailByIdx(${i})">
+    return`<tr class="trade-row" data-idx="${i}" style="cursor:pointer;background:${i%2===0?'#fff':'#f9fafb'};transition:background .15s" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${i%2===0?'#fff':'#f9fafb'}'" onclick="toggleDetail(${i})">
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap"><b style="color:#111;font-size:14px">${t.symbol||'—'}</b><span style="display:block;font-size:10px;color:#9ca3af;margin-top:1px">${exLabel}</span></td>
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;white-space:nowrap">${t.date||'—'}</td>
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;white-space:nowrap">${t.etime||'—'}<span style="display:block;color:#9ca3af;font-size:11px">${t.xtime||'—'}</span></td>
@@ -2792,6 +2791,11 @@ function exportNotionReport(){
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center;white-space:nowrap">${t.tf||'—'}</td>
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap"><b style="color:${pnlColor(pnl)};font-size:14px">${pnl>0?'+':''}${pnl.toFixed(2)} U</b></td>
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;text-align:center;white-space:nowrap"><span style="color:${gradeColor};font-weight:700">${t.grade||'—'}</span><span style="color:#9ca3af;font-size:11px"> (${t.score||0})</span></td>
+    </tr>
+    <tr class="detail-expand-row" id="expand-${i}" style="display:none">
+      <td colspan="14" style="padding:0;border-bottom:2px solid #6366f1;background:#f8f8ff">
+        <div id="expand-body-${i}" style="padding:24px 32px 28px"></div>
+      </td>
     </tr>`;
   }).join('');
 
@@ -2801,11 +2805,7 @@ function exportNotionReport(){
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#1f2937;min-height:100vh}
-    /* ── Layout ── */
-    .app{display:flex;height:100vh;overflow:hidden}
-    .list-panel{flex:1;min-width:0;overflow-y:auto;padding:28px 24px}
-    .detail-panel{width:480px;min-width:480px;background:#fff;border-left:1px solid #e5e7eb;overflow-y:auto;display:none;position:relative}
-    .detail-panel.open{display:block}
+    .page-wrap{max-width:1400px;margin:0 auto;padding:28px 24px}
     /* ── Header ── */
     .report-title{font-size:22px;font-weight:800;color:#111;margin-bottom:4px}
     .report-date{font-size:12px;color:#9ca3af;margin-bottom:18px}
@@ -2821,32 +2821,32 @@ function exportNotionReport(){
     thead tr{background:#f9fafb}
     thead th{padding:9px 14px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e5e7eb;white-space:nowrap;text-align:left}
     .table-scroll{overflow-x:auto}
-    /* ── Detail panel ── */
-    .detail-close{position:sticky;top:0;background:#fff;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb}
-    .detail-close-btn{background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1;padding:0 4px}
-    .detail-close-btn:hover{color:#111}
-    .detail-body{padding:24px 24px 40px}
-    .detail-hero{margin-bottom:20px}
-    .detail-symbol{font-size:26px;font-weight:800;color:#111;margin-bottom:6px}
-    .detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-    .detail-pnl{font-size:28px;font-weight:800;margin-bottom:16px}
-    .detail-props{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:20px}
-    .detail-prop{padding:10px 14px;border-bottom:1px solid #e5e7eb;border-right:1px solid #e5e7eb}
+    /* ── Expand row ── */
+    .trade-row.active-row{background:#eff6ff!important;border-left:3px solid #6366f1}
+    /* ── Detail expand ── */
+    .expand-inner{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+    .expand-col{}
+    .detail-hero{margin-bottom:16px}
+    .detail-symbol{font-size:22px;font-weight:800;color:#111;margin-bottom:6px}
+    .detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .detail-pnl{font-size:24px;font-weight:800;margin-bottom:0}
+    .detail-props{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:16px}
+    .detail-prop{padding:9px 12px;border-bottom:1px solid #e5e7eb;border-right:1px solid #e5e7eb}
     .detail-prop:nth-child(even){border-right:none}
     .detail-prop:nth-last-child(-n+2){border-bottom:none}
-    .prop-label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+    .prop-label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
     .prop-val{font-size:13px;color:#111;font-weight:500}
     /* ── Sections ── */
-    .section{margin-bottom:20px}
-    .section-title{font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:6px;padding-bottom:6px;border-bottom:1px solid #f3f4f6}
-    .section-body{font-size:13px;line-height:1.8;color:#374151;white-space:pre-wrap;background:#f9fafb;border-radius:8px;padding:12px 14px;min-height:40px}
+    .section{margin-bottom:16px}
+    .section-title{font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px;padding-bottom:5px;border-bottom:1px solid #f3f4f6}
+    .section-body{font-size:13px;line-height:1.8;color:#374151;white-space:pre-wrap;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;min-height:36px}
     .section-body.empty{color:#9ca3af;font-style:italic}
     /* ── Photos ── */
-    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
     .photo-item{aspect-ratio:16/9;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;cursor:pointer;background:#f3f4f6}
     .photo-item img{width:100%;height:100%;object-fit:cover;transition:transform .2s}
     .photo-item:hover img{transform:scale(1.04)}
-    .photo-empty{color:#9ca3af;font-size:12px;font-style:italic;padding:8px 0}
+    .photo-empty{color:#9ca3af;font-size:12px;font-style:italic;padding:6px 0}
     /* ── Lightbox ── */
     .lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
     .lb.on{display:flex}
@@ -2854,59 +2854,43 @@ function exportNotionReport(){
     /* ── Buttons ── */
     .print-btn{background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
     .print-btn:hover{background:#4f46e5}
-    .nav-btn{background:#f3f4f6;border:none;padding:6px 14px;border-radius:6px;font-size:13px;color:#374151;cursor:pointer;font-weight:500}
-    .nav-btn:hover{background:#e5e7eb}
     /* ── Print ── */
     @media print{
-      .app{display:block;height:auto}
-      .detail-panel{display:none!important}
+      .detail-expand-row{display:none!important}
       .no-print{display:none!important}
       body{background:#fff}
-      .list-panel{padding:16px;overflow:visible}
     }
   </style>
   </head><body>
   <div class="lb" id="lb" onclick="closeLb()"><img id="lb-img" src=""></div>
-  <div class="app">
-    <div class="list-panel">
-      <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div>
-          <div class="report-title">📋 交易日誌 Pro — 報表</div>
-          <div class="report-date">產生時間：${today} ｜ 共 ${list.length} 筆 ｜ 點擊任一行查看詳情</div>
-        </div>
-        <button class="print-btn no-print" onclick="window.print()">🖨️ 列印 / PDF</button>
+  <div class="page-wrap">
+    <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div class="report-title">📋 交易日誌 Pro — 報表</div>
+        <div class="report-date">產生時間：${today} ｜ 共 ${list.length} 筆 ｜ 點擊任一行展開詳情</div>
       </div>
-      <div class="stats-row">
-        <div class="stat-card"><div class="stat-label">總筆數</div><div class="stat-val">${list.length}</div></div>
-        <div class="stat-card"><div class="stat-label">勝率</div><div class="stat-val ${wr>=50?'green':'red'}">${wr}%</div></div>
-        <div class="stat-card"><div class="stat-label">總損益</div><div class="stat-val ${totalPnl>=0?'green':'red'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} U</div></div>
-        <div class="stat-card"><div class="stat-label">獲利</div><div class="stat-val green">${wins}</div></div>
-        <div class="stat-card"><div class="stat-label">虧損</div><div class="stat-val red">${list.length-wins}</div></div>
-      </div>
-      <div class="table-scroll"><div class="table-wrap"><table>
-        <thead><tr>
-          <th>品種 / 交易所</th><th>日期</th><th>進場 / 出場</th><th style="text-align:center">方向</th><th style="text-align:center">槓桿</th>
-          <th style="text-align:right">進場價</th><th style="text-align:right">出場價</th><th style="text-align:right">止損</th><th style="text-align:right">TP</th>
-          <th style="text-align:center">出場原因</th><th>策略</th><th style="text-align:center">週期</th>
-          <th style="text-align:right">損益</th><th style="text-align:center">評分</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div></div>
+      <button class="print-btn no-print" onclick="window.print()">🖨️ 列印 / PDF</button>
     </div>
-    <div class="detail-panel" id="detail-panel">
-      <div class="detail-close">
-        <div style="display:flex;gap:8px">
-          <button class="nav-btn" id="prev-btn" onclick="navDetail(-1)">← 上一筆</button>
-          <button class="nav-btn" id="next-btn" onclick="navDetail(1)">下一筆 →</button>
-        </div>
-        <button class="detail-close-btn" onclick="closeDetail()">✕</button>
-      </div>
-      <div class="detail-body" id="detail-body"></div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">總筆數</div><div class="stat-val">${list.length}</div></div>
+      <div class="stat-card"><div class="stat-label">勝率</div><div class="stat-val ${wr>=50?'green':'red'}">${wr}%</div></div>
+      <div class="stat-card"><div class="stat-label">總損益</div><div class="stat-val ${totalPnl>=0?'green':'red'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} U</div></div>
+      <div class="stat-card"><div class="stat-label">獲利</div><div class="stat-val green">${wins}</div></div>
+      <div class="stat-card"><div class="stat-label">虧損</div><div class="stat-val red">${list.length-wins}</div></div>
     </div>
+    <div class="table-scroll"><div class="table-wrap"><table>
+      <thead><tr>
+        <th>品種 / 交易所</th><th>日期</th><th>進場 / 出場</th><th style="text-align:center">方向</th><th style="text-align:center">槓桿</th>
+        <th style="text-align:right">進場價</th><th style="text-align:right">出場價</th><th style="text-align:right">止損</th><th style="text-align:right">TP</th>
+        <th style="text-align:center">出場原因</th><th>策略</th><th style="text-align:center">週期</th>
+        <th style="text-align:right">損益</th><th style="text-align:center">評分</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div></div>
   </div>
   <script>
   const TRADES=${tradesJson};
-  let currentIdx=-1;
+  let openIdx=-1;
   const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
   const dirBg=d=>d==='做多'?'#dcfce7':'#fee2e2';
   const pnlColor=p=>p>0?'#16a34a':p<0?'#dc2626':'#6b7280';
@@ -2917,93 +2901,101 @@ function exportNotionReport(){
   const gradeColor=g=>g==='S'?'#7c3aed':g==='A'?'#2563eb':g==='B'?'#16a34a':g==='C'?'#d97706':'#6b7280';
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  function openDetailByIdx(idx){
-    if(idx<0||idx>=TRADES.length)return;
-    currentIdx=idx;
-    renderDetail(TRADES[idx]);
-    document.getElementById('detail-panel').classList.add('open');
-    highlightRow(idx);
-  }
-  function closeDetail(){
-    document.getElementById('detail-panel').classList.remove('open');
-    document.querySelectorAll('.trade-row').forEach(r=>r.style.outline='');
-    currentIdx=-1;
-  }
-  function navDetail(dir){
-    const next=currentIdx+dir;
-    if(next<0||next>=TRADES.length)return;
-    currentIdx=next;
-    renderDetail(TRADES[currentIdx]);
-    highlightRow(currentIdx);
-  }
-  function highlightRow(idx){
-    document.querySelectorAll('.trade-row').forEach(r=>{
-      r.style.outline=r.dataset.idx==idx?'2px solid #6366f1':'';
-    });
-  }
   function photoGrid(imgs){
     if(!imgs||!imgs.length)return '<div class="photo-empty">尚無截圖</div>';
-    return'<div class="photo-grid">'+imgs.map(src=>'<div class="photo-item" onclick="openLb(\''+src.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" ><img src="'+esc(src)+'" loading="lazy"></div>').join('')+'</div>';
+    return'<div class="photo-grid">'+imgs.map(src=>'<div class="photo-item" onclick="event.stopPropagation();openLb(\''+src.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" ><img src="'+esc(src)+'" loading="lazy"></div>').join('')+'</div>';
   }
-  function renderDetail(t){
+
+  function renderExpandBody(t){
     const pnl=t.netPnl||0;
     const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
     const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const gc=gradeColor(t.grade);
-    document.getElementById('detail-body').innerHTML=
-      '<div class="detail-hero">'+
-        '<div class="detail-symbol">'+esc(t.symbol||'—')+'</div>'+
-        '<div class="detail-meta">'+
-          tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))+' '+
-          tag(xrLbl(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))+' '+
-          '<span style="font-size:12px;color:#6b7280;padding:2px 8px;background:#f3f4f6;border-radius:20px">'+esc(exLabel)+'</span>'+
-          '<span style="font-size:12px;color:#6b7280;padding:2px 8px;background:#f3f4f6;border-radius:20px">'+esc(t.tf||'—')+'</span>'+
-          (t.emotion?'<span style="font-size:12px;color:#d97706;padding:2px 8px;background:#fffbeb;border-radius:20px">'+esc(t.emotion)+'</span>':'')
-        +'</div>'+
-        '<div class="detail-pnl" style="color:'+pnlColor(pnl)+'">'+(pnl>0?'+':'')+pnl.toFixed(2)+' U</div>'+
-      '</div>'+
-      '<div class="detail-props">'+
-        '<div class="detail-prop"><div class="prop-label">日期</div><div class="prop-val">'+esc(t.date||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">槓桿</div><div class="prop-val">'+(t.lev?esc(t.lev)+'x':'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">進場時間</div><div class="prop-val">'+esc(t.etime||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">出場時間</div><div class="prop-val">'+esc(t.xtime||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">進場價</div><div class="prop-val">'+esc(t.entry||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">出場價</div><div class="prop-val">'+esc(t.exit||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label" style="color:#ef4444">止損</div><div class="prop-val" style="color:#ef4444">'+esc(t.sl||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label" style="color:#22c55e">TP</div><div class="prop-val" style="color:#22c55e">'+esc([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">策略</div><div class="prop-val">'+esc(strats)+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">評分</div><div class="prop-val" style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</div></div>'+
-      '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">📷 照片</div>'+
-        '<div style="margin-bottom:8px"><div style="font-size:11px;color:#9ca3af;margin-bottom:6px">進場截圖</div>'+photoGrid(t.images)+'</div>'+
-        '<div><div style="font-size:11px;color:#9ca3af;margin-bottom:6px">出場截圖</div>'+photoGrid(t.exitImages)+'</div>'+
-      '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">💡 進場邏輯</div>'+
-        '<div class="section-body'+(t.reason?'':' empty')+'">'+
-          (t.reason?esc(t.reason):'尚無進場邏輯紀錄')+
+    return '<div class="expand-inner">'+
+      '<div class="expand-col">'+
+        '<div class="detail-hero">'+
+          '<div class="detail-symbol">'+esc(t.symbol||'—')+'</div>'+
+          '<div class="detail-meta">'+
+            tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))+' '+
+            tag(xrLbl(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))+' '+
+            '<span style="font-size:12px;color:#6b7280;padding:2px 8px;background:#f3f4f6;border-radius:20px">'+esc(exLabel)+'</span>'+
+            '<span style="font-size:12px;color:#6b7280;padding:2px 8px;background:#f3f4f6;border-radius:20px">'+esc(t.tf||'—')+'</span>'+
+            (t.emotion?'<span style="font-size:12px;color:#d97706;padding:2px 8px;background:#fffbeb;border-radius:20px">'+esc(t.emotion)+'</span>':'')
+          +'</div>'+
+          '<div class="detail-pnl" style="color:'+pnlColor(pnl)+'">'+(pnl>0?'+':'')+pnl.toFixed(2)+' U</div>'+
+        '</div>'+
+        '<div class="detail-props">'+
+          '<div class="detail-prop"><div class="prop-label">日期</div><div class="prop-val">'+esc(t.date||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">槓桿</div><div class="prop-val">'+(t.lev?esc(t.lev)+'x':'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">進場時間</div><div class="prop-val">'+esc(t.etime||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">出場時間</div><div class="prop-val">'+esc(t.xtime||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">進場價</div><div class="prop-val">'+esc(t.entry||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">出場價</div><div class="prop-val">'+esc(t.exit||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label" style="color:#ef4444">止損</div><div class="prop-val" style="color:#ef4444">'+esc(t.sl||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label" style="color:#22c55e">TP</div><div class="prop-val" style="color:#22c55e">'+esc([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—')+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">策略</div><div class="prop-val">'+esc(strats)+'</div></div>'+
+          '<div class="detail-prop"><div class="prop-label">評分</div><div class="prop-val" style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</div></div>'+
+        '</div>'+
+        '<div class="section">'+
+          '<div class="section-title">📷 照片</div>'+
+          '<div style="margin-bottom:8px"><div style="font-size:11px;color:#9ca3af;margin-bottom:6px">進場截圖</div>'+photoGrid(t.images)+'</div>'+
+          '<div><div style="font-size:11px;color:#9ca3af;margin-bottom:6px">出場截圖</div>'+photoGrid(t.exitImages)+'</div>'+
         '</div>'+
       '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">🚪 出場</div>'+
-        '<div class="section-body'+(t.notes?'':' empty')+'">'+
-          (t.notes?esc(t.notes):'尚無出場備注')+
+      '<div class="expand-col">'+
+        '<div class="section">'+
+          '<div class="section-title">💡 進場邏輯</div>'+
+          '<div class="section-body'+(t.reason?'':' empty')+'">'+
+            (t.reason?esc(t.reason):'尚無進場邏輯紀錄')+
+          '</div>'+
+        '</div>'+
+        '<div class="section">'+
+          '<div class="section-title">🚪 出場</div>'+
+          '<div class="section-body'+(t.notes?'':' empty')+'">'+
+            (t.notes?esc(t.notes):'尚無出場備注')+
+          '</div>'+
+        '</div>'+
+        '<div class="section">'+
+          '<div class="section-title">🔍 檢討</div>'+
+          '<div class="section-body'+(t.emotion?'':' empty')+'">'+
+            (t.emotion?'情緒狀態：'+esc(t.emotion):'尚無檢討內容')+
+          '</div>'+
         '</div>'+
       '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">🔍 檢討</div>'+
-        '<div class="section-body empty">'+
-          (t.emotion?'情緒狀態：'+esc(t.emotion)+'':'尚無檢討內容')+
-        '</div>'+
-      '</div>';
-    document.getElementById('prev-btn').disabled=currentIdx<=0;
-    document.getElementById('next-btn').disabled=currentIdx>=TRADES.length-1;
+    '</div>';
   }
-  function openLb(src){const lb=document.getElementById('lb');document.getElementById('lb-img').src=src;lb.classList.add('on');}
+
+  function toggleDetail(idx){
+    const expandRow=document.getElementById('expand-'+idx);
+    const tradeRow=document.querySelectorAll('.trade-row')[idx];
+    if(openIdx===idx){
+      // Close
+      expandRow.style.display='none';
+      tradeRow.classList.remove('active-row');
+      openIdx=-1;
+      return;
+    }
+    // Close previous
+    if(openIdx>=0){
+      const prev=document.getElementById('expand-'+openIdx);
+      const prevRow=document.querySelectorAll('.trade-row')[openIdx];
+      if(prev)prev.style.display='none';
+      if(prevRow)prevRow.classList.remove('active-row');
+    }
+    // Open new
+    const body=document.getElementById('expand-body-'+idx);
+    body.innerHTML=renderExpandBody(TRADES[idx]);
+    expandRow.style.display='';
+    tradeRow.classList.add('active-row');
+    openIdx=idx;
+    // Scroll into view smoothly
+    setTimeout(()=>expandRow.scrollIntoView({behavior:'smooth',block:'nearest'}),50);
+  }
+
+  function openLb(src){document.getElementById('lb-img').src=src;document.getElementById('lb').classList.add('on');}
   function closeLb(){document.getElementById('lb').classList.remove('on');}
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDetail();if(e.key==='ArrowLeft')navDetail(-1);if(e.key==='ArrowRight')navDetail(1);});
-  <\/script>
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLb();});
+  </script>
   </body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 }
