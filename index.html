@@ -470,7 +470,11 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         <input type="password" id="okx-passphrase" placeholder="貼上 Passphrase" oninput="saveApiKeys()">
       </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+          <div style="font-size:12px;font-weight:600;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Worker URL <span style="font-weight:400;color:#c0c0c0">（CORS 代理，部署 Cloudflare Worker 後填入）</span></div>
+          <input type="text" id="worker-url-input" placeholder="https://your-worker.your-name.workers.dev" value="" oninput="saveWorkerUrl()" style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;box-sizing:border-box">
+        </div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="fetchBingXHistory()" style="font-size:12px">📋 BingX 歷史成交</button>
       <button class="btn" style="font-size:12px;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd" onclick="fetchOKXHistory()">📋 OKX 歷史成交</button>
       <button onclick="toggleApiSettings()" class="btn" style="font-size:12px">收起</button>
@@ -3067,6 +3071,14 @@ function saveApiKeys(){
   localStorage.setItem('okx_secret',document.getElementById('okx-secret-key')?.value||'');
   localStorage.setItem('okx_pass',document.getElementById('okx-passphrase')?.value||'');
 }
+
+function saveWorkerUrl(){
+  const url=document.getElementById('worker-url-input')?.value||'';
+  localStorage.setItem('worker_url',url);
+  // Update WORKER_URL runtime value so fetches use new value immediately
+  window._workerUrl=url;
+}
+
 function loadApiKeys(){
   const bk=localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw';
   const bs=localStorage.getItem('bx_secret')||'DEvAwWfMcvsSkfusv8moqdihrpkjX7hJPFlira1FV4T2gtzDpo5wpB4I74K7ZVJJ17AP6yFksQQbYmXw';
@@ -3076,7 +3088,17 @@ function loadApiKeys(){
   const set=(id,v)=>{const el=document.getElementById(id);if(el&&!el.value)el.value=v;};
   set('bingx-api-key',bk);set('bingx-secret-key',bs);
   set('okx-api-key',ok);set('okx-secret-key',os);set('okx-passphrase',op);
+  // Load Worker URL
+  const wu=localStorage.getItem('worker_url')||'';
+  const wInput=document.getElementById('worker-url-input');
+  if(wInput)wInput.value=wu;
+
 }
+// ── Cloudflare Worker URL ──
+// 部署 Worker 後填入你的 Worker URL，存在 localStorage
+const WORKER_URL = localStorage.getItem('worker_url') || 'https://trading-api-proxy.bb0983071189.workers.dev';
+window._workerUrl = WORKER_URL;
+
 function getApiKeys(){
   return{
     bx_key:document.getElementById('bingx-api-key')?.value||localStorage.getItem('bx_key')||'VPHZuWOHQssMcaYTSBe5k58m5blRhrVed24s3GToYvAlYH3hkafm9OEa45XVY8qlfaF6W83y9pdJ0PNAOsw',
@@ -3093,7 +3115,7 @@ function getApiKeys(){
 async function bingx2Request(path){
   const k=getApiKeys();
   try{
-    const res=await fetch(`${WORKER_URL}?exchange=bingx&path=${encodeURIComponent(path)}`,{
+    const res=await fetch(`${window._workerUrl||WORKER_URL}?exchange=bingx&path=${encodeURIComponent(path)}`,{
       headers:{'X-BINGX-KEY':k.bx2_key,'X-BINGX-SECRET':k.bx2_secret}
     });
     return await res.json();
@@ -3103,7 +3125,7 @@ async function bingx2Request(path){
 async function okxRequest(path){
   const k=getApiKeys();
   try{
-    const res=await fetch(`${WORKER_URL}?exchange=okx&path=${encodeURIComponent(path)}`,{
+    const res=await fetch(`${window._workerUrl||WORKER_URL}?exchange=okx&path=${encodeURIComponent(path)}`,{
       headers:{'X-OKX-KEY':k.okx_key,'X-OKX-SECRET':k.okx_secret,'X-OKX-PASSPHRASE':k.okx_pass}
     });
     return await res.json();
@@ -3611,7 +3633,7 @@ function setApiStatus(msg,color='var(--text2)'){
 async function bingxRequest(path){
   const k=getApiKeys();
   try{
-    const res=await fetch(`${WORKER_URL}?exchange=bingx&path=${encodeURIComponent(path)}`,{
+    const res=await fetch(`${window._workerUrl||WORKER_URL}?exchange=bingx&path=${encodeURIComponent(path)}`,{
       headers:{'X-BINGX-KEY':k.bx_key,'X-BINGX-SECRET':k.bx_secret}
     });
     return await res.json();
