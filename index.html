@@ -2800,16 +2800,19 @@ function exportShareReport(){
   const list=filterT(trades,recF);
   if(!list.length){alert('沒有資料可匯出');return;}
 
-  // Strip sensitive fields
-  const safeList=list.map(t=>({
-    symbol:t.symbol,exchange:t.exchange,isOP:t.isOP,date:t.date,
-    etime:t.etime,xtime:t.xtime,dir:t.dir,lev:t.lev,
-    entry:t.entry,exit:t.exit,sl:t.sl,tp1:t.tp1,tp2:t.tp2,tp3:t.tp3,
-    exitReason:t.exitReason,strats:t.strats,strat:t.strat,
-    tf:t.tf,netPnl:t.netPnl,score:t.score,grade:t.grade,
-    reason:t.reason,notes:t.notes,emotion:t.emotion,
-    images:t.images,exitImages:t.exitImages
-  }));
+  // Strip sensitive fields - keep only safe display fields
+  const safeList=list.map(t=>{
+    const s={};
+    const safe=['symbol','exchange','isOP','date','etime','xtime','dir','lev',
+      'entry','exit','sl','tp1','tp2','tp3','exitReason','strats','strat',
+      'tf','netPnl','score','grade','reason','notes','emotion','images','exitImages'];
+    safe.forEach(k=>{if(t[k]!==undefined)s[k]=t[k];});
+    return s;
+  });
+  // Verify serializable
+  let safeJson;
+  try{ safeJson=JSON.stringify({trades:safeList,generatedAt:new Date().toISOString()}); }
+  catch(e){ alert('資料序列化失敗：'+e.message); if(btn){btn.textContent=orig;btn.disabled=false;} return; }
 
   const btn=document.querySelector('[onclick="exportShareReport()"]');
   const orig=btn?btn.textContent:'';
@@ -2822,16 +2825,16 @@ function exportShareReport(){
     headers:{
       'Content-Type':'application/json',
       'X-Master-Key':JSONBIN_KEY,
-      'X-Bin-Name':'交易報表 '+new Date().toLocaleDateString('zh-TW'),
+      'X-Bin-Name':'report-'+Date.now(),
       'X-Bin-Private':'false'
     },
-    body:JSON.stringify({trades:safeList,generatedAt:new Date().toISOString()})
+    body:safeJson
   })
-  .then(r=>r.json())
+  .then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error('HTTP '+r.status+': '+t)});return r.json();})
   .then(data=>{
     if(btn){btn.textContent=orig;btn.disabled=false;}
-    const binId=data?.metadata?.id;
-    if(!binId){alert('上傳失敗：'+JSON.stringify(data));return;}
+    const binId=data?.metadata?.id||data?.record?._id||data?._id;
+    if(!binId){alert('上傳失敗，回應：'+JSON.stringify(data).slice(0,300));return;}
     // Build viewer URL using same GitHub Pages host + ?bin=ID
     const viewerUrl=location.origin+location.pathname+'?report='+binId;
     // Show share dialog
@@ -2851,7 +2854,8 @@ function exportShareReport(){
   })
   .catch(err=>{
     if(btn){btn.textContent=orig;btn.disabled=false;}
-    alert('上傳失敗：'+err.message);
+    console.error('JSONBin error:',err);
+    alert('上傳失敗：'+err.message+'\n\n請確認網路連線，或開啟 DevTools Console 查看詳細錯誤。');
   });
 }
 
