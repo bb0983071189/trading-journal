@@ -410,7 +410,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   <button class="nav-tab" onclick="showPage('report')">報表</button>
   <div class="sync-bar offline" id="sync-bar">
     <span class="sync-dot" id="sync-dot"></span>
-    <span id="sync-txt">連線中…</span>
+    <span id="sync-txt">載入中…</span>
   </div>
 </nav>
 
@@ -1243,11 +1243,18 @@ function mergeImagesIntoTrades(list){
 }
 
 function initFirebase(){
-  if(!window._fbReady){ setSyncStatus('offline','載入中');return; }
+  if(!window._fbReady){ setSyncStatus('offline','離線模式');return; }
   const {onSnapshot,tradesCol}=window._fb;
   setSyncStatus('syncing','連線中…');
+  // Timeout: if onSnapshot doesn't fire within 8s, show error
+  let firstSnap=false;
+  const connTimeout=setTimeout(()=>{
+    if(!firstSnap) setSyncStatus('error','連線逾時，請重新整理');
+  }, 8000);
   // Real-time listener — fires on any device change
   onSnapshot(tradesCol, snap=>{
+    firstSnap=true;
+    clearTimeout(connTimeout);
     const remote=snap.docs.map(d=>({...d.data(),id:Number(d.id)||d.id}));
     remote.sort((a,b)=>b.id-a.id);
     trades=mergeImagesIntoTrades(remote);
@@ -1256,8 +1263,10 @@ function initFirebase(){
     if(document.getElementById('page-report').classList.contains('on'))renderRep();
     setSyncStatus('synced','已同步 ✓');
   }, err=>{
+    firstSnap=true;
+    clearTimeout(connTimeout);
     console.error('Firestore listener error',err);
-    setSyncStatus('error','連線失敗');
+    setSyncStatus('error','連線失敗: '+err.code);
   });
 }
 
@@ -2748,6 +2757,7 @@ function clearAll(){if(!confirm('確定清除所有交易紀錄？此操作無�
 function exportNotionReport(){
   const list=filterT(trades,recF);
   if(!list.length){alert('沒有資料可匯出');return;}
+
   const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
   const dirBg=d=>d==='做多'?'#dcfce7':'#fee2e2';
   const pnlColor=p=>p>0?'#16a34a':p<0?'#dc2626':'#6b7280';
@@ -2756,11 +2766,11 @@ function exportNotionReport(){
   const xrLabelMap=r=>{const m={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',sl:'止損 SL',be:'平保',manual:'手動',liq:'強平'};return m[r]||r||'—';};
   const tag=(txt,color,bg)=>`<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:${color};background:${bg}">${txt}</span>`;
   const today=new Date().toLocaleDateString('zh-TW');
+
   const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
   const wins=list.filter(t=>(t.netPnl||0)>0).length;
   const wr=list.length?Math.round(wins/list.length*100):0;
 
-  // Serialize trade data into JS for the detail panel
   const tradesJson=JSON.stringify(list.map(t=>({
     id:t.id,symbol:t.symbol,date:t.date,etime:t.etime,xtime:t.xtime,
     dir:t.dir,exchange:t.exchange,isOP:t.isOP,lev:t.lev,
@@ -2773,140 +2783,147 @@ function exportNotionReport(){
   }))).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
 
   const rows=list.map((t,i)=>{
-    const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
-    const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const pnl=t.netPnl||0;
+    const exLabel=t.exchange+(t.isOP?' (OP)':'');
+    const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
     const gradeColor=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
-    return`<tr class="trade-row" data-id="${t.id}" style="cursor:pointer;background:${i%2===0?'#fff':'#f9fafb'};transition:background .15s" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${i%2===0?'#fff':'#f9fafb'}'" onclick="openDetail(${t.id})">
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap"><b style="color:#111;font-size:14px">${t.symbol||'—'}</b><span style="display:block;font-size:10px;color:#9ca3af;margin-top:1px">${exLabel}</span></td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;white-space:nowrap">${t.date||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;white-space:nowrap">${t.etime||'—'}<span style="display:block;color:#9ca3af;font-size:11px">${t.xtime||'—'}</span></td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;text-align:center">${tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:center;white-space:nowrap">${t.lev?t.lev+'x':'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:right;white-space:nowrap">${t.entry||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:right;white-space:nowrap">${t.exit||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:right;white-space:nowrap;color:#ef4444">${t.sl||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:right;white-space:nowrap;color:#22c55e">${[t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;text-align:center">${tag(xrLabelMap(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;white-space:nowrap">${strats||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center;white-space:nowrap">${t.tf||'—'}</td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap"><b style="color:${pnlColor(pnl)};font-size:14px">${pnl>0?'+':''}${pnl.toFixed(2)} U</b></td>
-      <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;text-align:center;white-space:nowrap"><span style="color:${gradeColor};font-weight:700">${t.grade||'—'}</span><span style="color:#9ca3af;font-size:11px"> (${t.score||0})</span></td>
+    return`<tr onclick="showDetail(${i})" style="cursor:pointer;border-bottom:1px solid #f3f4f6;transition:background .12s" onmouseover="this.style.background='#f5f5ff'" onmouseout="this.style.background=''">
+      <td style="padding:11px 12px">
+        <div style="font-weight:700;font-size:14px;color:#111">${t.symbol||'—'}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:2px">${exLabel}</div>
+      </td>
+      <td style="padding:11px 12px;font-size:13px;color:#6b7280">${t.date||'—'}</td>
+      <td style="padding:11px 12px;font-size:12px;color:#374151">
+        <div>${t.etime||'—'}</div><div style="color:#9ca3af">${t.xtime||'—'}</div>
+      </td>
+      <td style="padding:11px 12px;text-align:center">${tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#374151;text-align:center">${t.lev?t.lev+'x':'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#374151;text-align:center">${t.entry||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#374151;text-align:center">${t.exit||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#ef4444;text-align:center">${t.sl||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#22c55e;text-align:center">${[t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—'}</td>
+      <td style="padding:11px 12px;text-align:center">${tag(xrLabelMap(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#374151;text-align:center">${strats}</td>
+      <td style="padding:11px 12px;font-size:13px;color:#374151;text-align:center">${t.tf||'—'}</td>
+      <td style="padding:11px 12px;font-weight:700;font-size:14px;text-align:right;color:${pnlColor(pnl)}">${pnl>0?'+':''}${pnl.toFixed(2)} U</td>
+      <td style="padding:11px 12px;text-align:center;font-weight:700;color:${gradeColor}">${t.grade||'—'} <span style="font-weight:400;font-size:11px;color:#9ca3af">(${t.score||0})</span></td>
     </tr>`;
   }).join('');
 
   const html=`<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>交易日誌 Pro — 報表 ${today}</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>交易日誌 Pro — 報表</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#1f2937;min-height:100vh}
-    /* ── Layout ── */
-    .app{display:flex;height:100vh;overflow:hidden}
-    .list-panel{flex:1;min-width:0;overflow-y:auto;padding:28px 24px}
-    .detail-panel{width:480px;min-width:480px;background:#fff;border-left:1px solid #e5e7eb;overflow-y:auto;display:none;position:relative}
-    .detail-panel.open{display:block}
-    /* ── Header ── */
-    .report-title{font-size:22px;font-weight:800;color:#111;margin-bottom:4px}
-    .report-date{font-size:12px;color:#9ca3af;margin-bottom:18px}
-    /* ── Stats ── */
-    .stats-row{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
-    .stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;min-width:110px}
-    .stat-label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
-    .stat-val{font-size:20px;font-weight:800;color:#111}
-    .stat-val.green{color:#16a34a}.stat-val.red{color:#dc2626}
-    /* ── Table ── */
-    .table-wrap{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#1f2937}
+    #view-list{display:block}
+    #view-detail{display:none;min-height:100vh}
+    /* Header */
+    .rpt-header{padding:20px 24px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .rpt-title{font-size:22px;font-weight:800;color:#111;margin-bottom:2px}
+    .rpt-sub{font-size:12px;color:#9ca3af;margin-bottom:14px}
+    .stats-row{display:flex;gap:10px;flex-wrap:wrap}
+    .stat{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px 16px;min-width:80px}
+    .stat-lbl{font-size:11px;color:#9ca3af;margin-bottom:3px}
+    .stat-val{font-size:18px;font-weight:800;color:#111}
+    .stat-val.pos{color:#16a34a}.stat-val.neg{color:#dc2626}
+    .print-btn{background:#6366f1;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;flex-shrink:0}
+    /* Table */
+    .tbl-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;min-width:900px}
-    thead tr{background:#f9fafb}
-    thead th{padding:9px 14px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e5e7eb;white-space:nowrap;text-align:left}
-    .table-scroll{overflow-x:auto}
-    /* ── Detail panel ── */
-    .detail-close{position:sticky;top:0;background:#fff;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb}
-    .detail-close-btn{background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1;padding:0 4px}
-    .detail-close-btn:hover{color:#111}
-    .detail-body{padding:24px 24px 40px}
-    .detail-hero{margin-bottom:20px}
-    .detail-symbol{font-size:26px;font-weight:800;color:#111;margin-bottom:6px}
-    .detail-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-    .detail-pnl{font-size:28px;font-weight:800;margin-bottom:16px}
-    .detail-props{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:20px}
-    .detail-prop{padding:10px 14px;border-bottom:1px solid #e5e7eb;border-right:1px solid #e5e7eb}
-    .detail-prop:nth-child(even){border-right:none}
-    .detail-prop:nth-last-child(-n+2){border-bottom:none}
-    .prop-label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
-    .prop-val{font-size:13px;color:#111;font-weight:500}
-    /* ── Sections ── */
-    .section{margin-bottom:20px}
-    .section-title{font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:6px;padding-bottom:6px;border-bottom:1px solid #f3f4f6}
-    .section-body{font-size:13px;line-height:1.8;color:#374151;white-space:pre-wrap;background:#f9fafb;border-radius:8px;padding:12px 14px;min-height:40px}
-    .section-body.empty{color:#9ca3af;font-style:italic}
-    /* ── Photos ── */
-    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
-    .photo-item{aspect-ratio:16/9;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;cursor:pointer;background:#f3f4f6}
-    .photo-item img{width:100%;height:100%;object-fit:cover;transition:transform .2s}
-    .photo-item:hover img{transform:scale(1.04)}
-    .photo-empty{color:#9ca3af;font-size:12px;font-style:italic;padding:8px 0}
-    /* ── Lightbox ── */
-    .lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
+    thead th{padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #e5e7eb;white-space:nowrap;text-align:left}
+    thead th.tc{text-align:center}
+    thead th.tr{text-align:right}
+    /* Detail view */
+    .detail-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:#fff;z-index:10}
+    .back-btn{display:flex;align-items:center;gap:6px;font-size:15px;color:#6366f1;background:none;border:none;cursor:pointer;font-weight:600;padding:0}
+    .back-btn svg{width:18px;height:18px;fill:none;stroke:#6366f1;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+    .nav-arrows{display:flex;gap:8px}
+    .arrow-btn{background:#f3f4f6;border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;color:#374151;font-weight:600}
+    .arrow-btn:hover{background:#e5e7eb}
+    /* Notion page */
+    .notion-page{padding:32px 24px 60px;max-width:720px;margin:0 auto}
+    .page-title{font-size:32px;font-weight:800;color:#111;margin-bottom:4px;line-height:1.2}
+    .page-subtitle{font-size:13px;color:#9ca3af;margin-bottom:24px}
+    .pnl-hero{font-size:28px;font-weight:800;margin-bottom:20px}
+    .prop-table{width:100%;margin-bottom:28px;font-size:14px}
+    .prop-table tr td:first-child{color:#9ca3af;font-weight:500;padding:6px 0;width:40%;vertical-align:top}
+    .prop-table tr td:last-child{color:#111;font-weight:500;padding:6px 0}
+    .n-section{margin-bottom:28px}
+    .n-heading{font-size:16px;font-weight:700;color:#111;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb}
+    .n-list{list-style:none;padding:0;margin:4px 0}
+    .n-list li{display:flex;align-items:flex-start;gap:10px;padding:5px 0;font-size:14px;line-height:1.6;color:#374151}
+    .n-list li::before{content:'◆';color:#f59e0b;font-size:11px;margin-top:4px;flex-shrink:0}
+    .n-empty{font-size:13px;color:#c0c0c0;font-style:italic;padding:8px 0}
+    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:8px}
+    .photo-item{aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;cursor:pointer;background:#f3f4f6}
+    .photo-item img{width:100%;height:100%;object-fit:cover}
+    .lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
     .lb.on{display:flex}
-    .lb img{max-width:92vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
-    /* ── Buttons ── */
-    .print-btn{background:#6366f1;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
-    .print-btn:hover{background:#4f46e5}
-    .nav-btn{background:#f3f4f6;border:none;padding:6px 14px;border-radius:6px;font-size:13px;color:#374151;cursor:pointer;font-weight:500}
-    .nav-btn:hover{background:#e5e7eb}
-    /* ── Print ── */
-    @media print{
-      .app{display:block;height:auto}
-      .detail-panel{display:none!important}
-      .no-print{display:none!important}
-      body{background:#fff}
-      .list-panel{padding:16px;overflow:visible}
-    }
+    .lb img{max-width:94vw;max-height:92vh;border-radius:10px}
+    @media print{.detail-nav,.print-btn{display:none!important}#view-list{display:none!important}#view-detail{display:block!important}}
   </style>
   </head><body>
   <div class="lb" id="lb" onclick="closeLb()"><img id="lb-img" src=""></div>
-  <div class="app">
-    <div class="list-panel">
-      <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div>
-          <div class="report-title">📋 交易日誌 Pro — 報表</div>
-          <div class="report-date">產生時間：${today} ｜ 共 ${list.length} 筆 ｜ 點擊任一行查看詳情</div>
+
+  <!-- LIST VIEW -->
+  <div id="view-list">
+    <div class="rpt-header">
+      <div>
+        <div class="rpt-title">📋 交易日誌 Pro — 報表</div>
+        <div class="rpt-sub">產生時間：${today} ｜ 共 ${list.length} 筆 ｜ 點擊任一行查看詳情</div>
+        <div class="stats-row">
+          <div class="stat"><div class="stat-lbl">總筆數</div><div class="stat-val">${list.length}</div></div>
+          <div class="stat"><div class="stat-lbl">勝率</div><div class="stat-val ${wr>=50?'pos':'neg'}">${wr}%</div></div>
+          <div class="stat"><div class="stat-lbl">總損益</div><div class="stat-val ${totalPnl>=0?'pos':'neg'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} U</div></div>
+          <div class="stat"><div class="stat-lbl">獲利</div><div class="stat-val pos">${wins}</div></div>
+          <div class="stat"><div class="stat-lbl">虧損</div><div class="stat-val neg">${list.length-wins}</div></div>
         </div>
-        <button class="print-btn no-print" onclick="window.print()">🖨️ 列印 / PDF</button>
       </div>
-      <div class="stats-row">
-        <div class="stat-card"><div class="stat-label">總筆數</div><div class="stat-val">${list.length}</div></div>
-        <div class="stat-card"><div class="stat-label">勝率</div><div class="stat-val ${wr>=50?'green':'red'}">${wr}%</div></div>
-        <div class="stat-card"><div class="stat-label">總損益</div><div class="stat-val ${totalPnl>=0?'green':'red'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} U</div></div>
-        <div class="stat-card"><div class="stat-label">獲利</div><div class="stat-val green">${wins}</div></div>
-        <div class="stat-card"><div class="stat-label">虧損</div><div class="stat-val red">${list.length-wins}</div></div>
-      </div>
-      <div class="table-scroll"><div class="table-wrap"><table>
+      <button class="print-btn" onclick="window.print()">🖨️ 列印 / PDF</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
         <thead><tr>
-          <th>品種 / 交易所</th><th>日期</th><th>進場 / 出場</th><th style="text-align:center">方向</th><th style="text-align:center">槓桿</th>
-          <th style="text-align:right">進場價</th><th style="text-align:right">出場價</th><th style="text-align:right">止損</th><th style="text-align:right">TP</th>
-          <th style="text-align:center">出場原因</th><th>策略</th><th style="text-align:center">週期</th>
-          <th style="text-align:right">損益</th><th style="text-align:center">評分</th>
+          <th>品種 / 交易所</th>
+          <th>日期</th>
+          <th>進場 / 出場</th>
+          <th class="tc">方向</th>
+          <th class="tc">槓桿</th>
+          <th class="tc">進場價</th>
+          <th class="tc">出場價</th>
+          <th class="tc">止損</th>
+          <th class="tc">TP</th>
+          <th class="tc">出場原因</th>
+          <th class="tc">策略</th>
+          <th class="tc">週期</th>
+          <th class="tr">損益</th>
+          <th class="tc">評分</th>
         </tr></thead>
         <tbody>${rows}</tbody>
-      </table></div></div>
-    </div>
-    <div class="detail-panel" id="detail-panel">
-      <div class="detail-close">
-        <div style="display:flex;gap:8px">
-          <button class="nav-btn" id="prev-btn" onclick="navDetail(-1)">← 上一筆</button>
-          <button class="nav-btn" id="next-btn" onclick="navDetail(1)">下一筆 →</button>
-        </div>
-        <button class="detail-close-btn" onclick="closeDetail()">✕</button>
-      </div>
-      <div class="detail-body" id="detail-body"></div>
+      </table>
     </div>
   </div>
+
+  <!-- DETAIL VIEW -->
+  <div id="view-detail">
+    <div class="detail-nav">
+      <button class="back-btn" onclick="goBack()">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        返回清單
+      </button>
+      <div class="nav-arrows">
+        <button class="arrow-btn" onclick="navTo(-1)">← 上一筆</button>
+        <button class="arrow-btn" onclick="navTo(1)">下一筆 →</button>
+      </div>
+    </div>
+    <div class="notion-page" id="notion-body"></div>
+  </div>
+
   <script>
   const TRADES=${tradesJson};
-  let currentIdx=-1;
+  let curIdx=-1;
   const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
   const dirBg=d=>d==='做多'?'#dcfce7':'#fee2e2';
   const pnlColor=p=>p>0?'#16a34a':p<0?'#dc2626':'#6b7280';
@@ -2916,111 +2933,60 @@ function exportNotionReport(){
   const tag=(txt,c,bg)=>'<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:'+c+';background:'+bg+'">'+txt+'</span>';
   const gradeColor=g=>g==='S'?'#7c3aed':g==='A'?'#2563eb':g==='B'?'#16a34a':g==='C'?'#d97706':'#6b7280';
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  function openDetail(id){
-    const idx=TRADES.findIndex(t=>t.id===id);
-    if(idx<0)return;
-    currentIdx=idx;
-    renderDetail(TRADES[idx]);
-    document.getElementById('detail-panel').classList.add('open');
-    highlightRow(id);
-  }
-  function closeDetail(){
-    document.getElementById('detail-panel').classList.remove('open');
-    document.querySelectorAll('.trade-row').forEach(r=>r.style.outline='');
-    currentIdx=-1;
-  }
-  function navDetail(dir){
-    const next=currentIdx+dir;
-    if(next<0||next>=TRADES.length)return;
-    currentIdx=next;
-    renderDetail(TRADES[currentIdx]);
-    highlightRow(TRADES[currentIdx].id);
-  }
-  function highlightRow(id){
-    document.querySelectorAll('.trade-row').forEach(r=>{
-      r.style.outline=r.dataset.id==id?'2px solid #6366f1':'';
-    });
+  function toBullets(text){
+    if(!text)return '<p class="n-empty">尚無內容</p>';
+    const lines=text.split(/\n/).filter(l=>l.trim());
+    if(!lines.length)return '<p class="n-empty">尚無內容</p>';
+    return '<ul class="n-list">'+lines.map(l=>'<li>'+esc(l)+'</li>').join('')+'</ul>';
   }
   function photoGrid(imgs){
-    if(!imgs||!imgs.length)return '<div class="photo-empty">尚無截圖</div>';
-    return'<div class="photo-grid">'+imgs.map(src=>'<div class="photo-item" onclick="openLb(\''+src.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" ><img src="'+esc(src)+'" loading="lazy"></div>').join('')+'</div>';
+    if(!imgs||!imgs.length)return '<p class="n-empty">尚無截圖</p>';
+    return '<div class="photo-grid">'+imgs.map(src=>'<div class="photo-item" onclick="openLb(\''+src.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')"><img src="'+esc(src)+'" loading="lazy"></div>').join('')+'</div>';
   }
-  function renderDetail(t){
+  function renderPage(t){
     const pnl=t.netPnl||0;
     const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
     const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const gc=gradeColor(t.grade);
-    document.getElementById('detail-body').innerHTML=
-      '<div class="detail-hero">'+
-        '<div class="detail-symbol">'+esc(t.symbol||'—')+'</div>'+
-        '<div class="detail-meta">'+
-          tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))+' '+
-          tag(xrLbl(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))+' '+
-          '<span style="font-size:12px;color:#6b7280;padding:2px 8px;background:#f3f4f6;border-radius:20px">'+esc(exLabel)+'</span>'+
-          '<span style="font-size:12px;color:#6b7280;padding:2px 8px;background:#f3f4f6;border-radius:20px">'+esc(t.tf||'—')+'</span>'+
-          (t.emotion?'<span style="font-size:12px;color:#d97706;padding:2px 8px;background:#fffbeb;border-radius:20px">'+esc(t.emotion)+'</span>':'')
-        +'</div>'+
-        '<div class="detail-pnl" style="color:'+pnlColor(pnl)+'">'+(pnl>0?'+':'')+pnl.toFixed(2)+' U</div>'+
-      '</div>'+
-      '<div class="detail-props">'+
-        '<div class="detail-prop"><div class="prop-label">日期</div><div class="prop-val">'+esc(t.date||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">槓桿</div><div class="prop-val">'+(t.lev?esc(t.lev)+'x':'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">進場時間</div><div class="prop-val">'+esc(t.etime||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">出場時間</div><div class="prop-val">'+esc(t.xtime||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">進場價</div><div class="prop-val">'+esc(t.entry||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">出場價</div><div class="prop-val">'+esc(t.exit||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label" style="color:#ef4444">止損</div><div class="prop-val" style="color:#ef4444">'+esc(t.sl||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label" style="color:#22c55e">TP</div><div class="prop-val" style="color:#22c55e">'+esc([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—')+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">策略</div><div class="prop-val">'+esc(strats)+'</div></div>'+
-        '<div class="detail-prop"><div class="prop-label">評分</div><div class="prop-val" style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</div></div>'+
-      '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">📷 照片</div>'+
-        '<div style="margin-bottom:8px"><div style="font-size:11px;color:#9ca3af;margin-bottom:6px">進場截圖</div>'+photoGrid(t.images)+'</div>'+
-        '<div><div style="font-size:11px;color:#9ca3af;margin-bottom:6px">出場截圖</div>'+photoGrid(t.exitImages)+'</div>'+
-      '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">💡 進場邏輯</div>'+
-        '<div class="section-body'+(t.reason?'':' empty')+'">'+
-          (t.reason?esc(t.reason):'尚無進場邏輯紀錄')+
-        '</div>'+
-      '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">🚪 出場</div>'+
-        '<div class="section-body'+(t.notes?'':' empty')+'">'+
-          (t.notes?esc(t.notes):'尚無出場備注')+
-        '</div>'+
-      '</div>'+
-      '<div class="section">'+
-        '<div class="section-title">🔍 檢討</div>'+
-        '<div class="section-body empty">'+
-          (t.emotion?'情緒狀態：'+esc(t.emotion)+'':'尚無檢討內容')+
-        '</div>'+
-      '</div>';
-    document.getElementById('prev-btn').disabled=currentIdx<=0;
-    document.getElementById('next-btn').disabled=currentIdx>=TRADES.length-1;
+    document.getElementById('notion-body').innerHTML=
+      '<div class="page-title">'+esc(t.symbol||'—')+'</div>'+
+      '<div class="page-subtitle">'+esc(t.date||'—')+' ｜ '+esc(exLabel)+'</div>'+
+      '<div class="pnl-hero" style="color:'+pnlColor(pnl)+'">'+(pnl>0?'+':'')+pnl.toFixed(2)+' U</div>'+
+      '<table class="prop-table">'+
+        '<tr><td>方向</td><td>'+tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))+'</td></tr>'+
+        '<tr><td>出場原因</td><td>'+tag(xrLbl(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))+'</td></tr>'+
+        '<tr><td>進場時間</td><td>'+esc(t.etime||'—')+'</td></tr>'+
+        '<tr><td>出場時間</td><td>'+esc(t.xtime||'—')+'</td></tr>'+
+        '<tr><td>進場價</td><td>'+esc(t.entry||'—')+'</td></tr>'+
+        '<tr><td>出場價</td><td>'+esc(t.exit||'—')+'</td></tr>'+
+        '<tr><td>止損</td><td style="color:#ef4444">'+esc(t.sl||'—')+'</td></tr>'+
+        '<tr><td>TP</td><td style="color:#22c55e">'+esc([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—')+'</td></tr>'+
+        '<tr><td>槓桿</td><td>'+(t.lev?esc(t.lev)+'x':'—')+'</td></tr>'+
+        '<tr><td>策略</td><td>'+esc(strats)+'</td></tr>'+
+        '<tr><td>週期</td><td>'+esc(t.tf||'—')+'</td></tr>'+
+        '<tr><td>情緒</td><td>'+esc(t.emotion||'—')+'</td></tr>'+
+        '<tr><td>評分</td><td style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</td></tr>'+
+      '</table>'+
+      '<div class="n-section"><div class="n-heading">📷 進場截圖</div>'+photoGrid(t.images)+'</div>'+
+      '<div class="n-section"><div class="n-heading">📷 出場截圖</div>'+photoGrid(t.exitImages)+'</div>'+
+      '<div class="n-section"><div class="n-heading">💡 進場邏輯</div>'+toBullets(t.reason)+'</div>'+
+      '<div class="n-section"><div class="n-heading">🚪 出場 / 複盤筆記</div>'+toBullets(t.notes)+'</div>'+
+      '<div class="n-section"><div class="n-heading">😌 情緒狀態</div>'+(t.emotion?toBullets(t.emotion):'<p class="n-empty">尚無記錄</p>')+'</div>';
   }
-  function openLb(src){const lb=document.getElementById('lb');document.getElementById('lb-img').src=src;lb.classList.add('on');}
+  function showDetail(idx){curIdx=idx;renderPage(TRADES[idx]);document.getElementById('view-list').style.display='none';document.getElementById('view-detail').style.display='block';window.scrollTo(0,0);}
+  function goBack(){document.getElementById('view-detail').style.display='none';document.getElementById('view-list').style.display='block';}
+  function navTo(dir){const next=curIdx+dir;if(next<0||next>=TRADES.length)return;curIdx=next;renderPage(TRADES[curIdx]);window.scrollTo(0,0);}
+  function openLb(src){document.getElementById('lb-img').src=src;document.getElementById('lb').classList.add('on');}
   function closeLb(){document.getElementById('lb').classList.remove('on');}
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDetail();if(e.key==='ArrowLeft')navDetail(-1);if(e.key==='ArrowRight')navDetail(1);});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){if(document.getElementById('lb').classList.contains('on'))closeLb();else goBack();}
+    if(e.key==='ArrowLeft')navTo(-1);
+    if(e.key==='ArrowRight')navTo(1);
+  });
   <\/script>
-  </body></html>`;
+  <\/body><\/html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 }
-
-document.getElementById('edit-modal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
-document.getElementById('exit-modal').addEventListener('click',function(e){if(e.target===this)closeExitModal();});
-// Dedicated paste listener for exit modal — catches Ctrl+V regardless of focus
-document.getElementById('exit-modal').addEventListener('paste',function(e){
-  const items=Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
-  if(!items.length)return;
-  e.stopPropagation();
-  handleExitModalFiles(items.map(i=>i.getAsFile()).filter(Boolean));
-});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeEditModal();closeExitModal();closeLb();}});
-// ===== BINGX API INTEGRATION =====
-const WORKER_URL='https://trading-api-proxy.bb0983071189.workers.dev';
 
 function toggleApiSettings(){
   const body=document.getElementById('api-settings-body');
