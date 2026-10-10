@@ -2796,8 +2796,7 @@ function clearTfChips(){
 }
 
 
-function exportShareReport(){
-  const list=filterT(trades,recF);
+function _exportShareReportWithList(list){
   if(!list.length){alert('沒有資料可匯出');return;}
 
   // Strip sensitive fields - keep only safe display fields
@@ -2860,8 +2859,122 @@ function exportShareReport(){
 }
 
 
-function exportNotionReport(){
-  const list=filterT(trades,recF);
+
+// ── 報表篩選對話框 ──
+function showReportFilter(mode){
+  // mode = 'notion' | 'share'
+  // Collect platforms present in trades
+  const platSet=new Set();
+  trades.forEach(t=>{
+    if(t.exchange==='BingX'&&t.isOP) platSet.add('BingX2');
+    else if(t.exchange) platSet.add(t.exchange);
+  });
+  const platList=[{key:'all',label:'全部平台'}];
+  if(platSet.has('OKX'))     platList.push({key:'OKX',    label:'OKX'});
+  if(platSet.has('BingX'))   platList.push({key:'BingX',  label:'BingX'});
+  if(platSet.has('BingX2'))  platList.push({key:'BingX2', label:'BingX (OP)'});
+
+  // Build strat options across all platforms
+  const stratMap={};
+  platSet.forEach(p=>{
+    const realEx=p==='BingX2'?'BingX':p;
+    (STRAT_DEFS[realEx]||[]).forEach(s=>{ stratMap[s.key]=true; });
+  });
+  const stratKeys=Object.keys(stratMap);
+
+  const ov=document.createElement('div');
+  ov.id='rpt-filter-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99990;display:flex;align-items:center;justify-content:center';
+
+  ov.innerHTML=`<div style="background:#fff;border-radius:18px;padding:28px 24px;max-width:480px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,.25);max-height:90vh;overflow-y:auto">
+    <div style="font-size:19px;font-weight:800;color:#111;margin-bottom:4px">${mode==='notion'?'📋 產生 Notion 報表':'🔗 產生分享連結'}</div>
+    <div style="font-size:13px;color:#9ca3af;margin-bottom:20px">選擇要包含的平台與策略</div>
+
+    <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px">📌 平台</div>
+    <div id="rpf-plat" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">
+      ${platList.map(p=>`<button type="button" onclick="rpfTogglePlat('${p.key}',this)"
+        style="padding:6px 14px;border-radius:20px;border:1.5px solid #e5e7eb;background:#f9fafb;font-size:13px;font-weight:600;cursor:pointer;color:#374151"
+        data-plat="${p.key}">${p.label}</button>`).join('')}
+    </div>
+
+    ${stratKeys.length?`
+    <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px">🎯 策略 <span style="font-weight:400;color:#9ca3af;font-size:11px">（不選 = 全部）</span></div>
+    <div id="rpf-strat" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px">
+      ${stratKeys.map(s=>`<button type="button" onclick="rpfToggleStrat('${s.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',this)"
+        style="padding:5px 12px;border-radius:20px;border:1.5px solid #e5e7eb;background:#f9fafb;font-size:12px;cursor:pointer;color:#374151"
+        data-strat="${s.replace(/"/g,'&quot;')}">${s}</button>`).join('')}
+    </div>`:''}
+
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('rpt-filter-ov').remove()" style="flex:1;background:#f3f4f6;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;color:#374151">取消</button>
+      <button onclick="rpfConfirm('${mode}')" style="flex:2;background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">產生報表</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(ov);
+
+  // Auto-select "全部平台"
+  const allBtn=ov.querySelector('[data-plat="all"]');
+  if(allBtn) rpfTogglePlat('all',allBtn);
+}
+
+window._rpfSelPlat='all';
+window._rpfSelStrats=[];
+
+function rpfTogglePlat(key,btn){
+  window._rpfSelPlat=key;
+  document.querySelectorAll('#rpf-plat button').forEach(b=>{
+    b.style.background= b===btn?'#4f46e5':'#f9fafb';
+    b.style.color=      b===btn?'#fff':'#374151';
+    b.style.borderColor=b===btn?'#4f46e5':'#e5e7eb';
+  });
+  // Update strat chips to reflect this platform's strategies
+  const realEx=key==='BingX2'?'BingX':key;
+  const avail=key==='all'
+    ? Object.keys(Object.assign({},...Object.values(STRAT_DEFS).map(a=>Object.fromEntries(a.map(s=>[s.key,1])))))
+    : (STRAT_DEFS[realEx]||[]).map(s=>s.key);
+  const availSet=new Set(avail);
+  document.querySelectorAll('#rpf-strat button').forEach(b=>{
+    const visible=key==='all'||availSet.has(b.dataset.strat);
+    b.style.display=visible?'':'none';
+    if(!visible){b.classList.remove('on');b.style.background='#f9fafb';b.style.color='#374151';b.style.borderColor='#e5e7eb';}
+  });
+  window._rpfSelStrats=[];
+}
+
+function rpfToggleStrat(key,btn){
+  const idx=window._rpfSelStrats.indexOf(key);
+  if(idx>-1){
+    window._rpfSelStrats.splice(idx,1);
+    btn.style.background='#f9fafb'; btn.style.color='#374151'; btn.style.borderColor='#e5e7eb';
+  } else {
+    window._rpfSelStrats.push(key);
+    btn.style.background='#4f46e5'; btn.style.color='#fff'; btn.style.borderColor='#4f46e5';
+  }
+}
+
+function rpfConfirm(mode){
+  document.getElementById('rpt-filter-ov').remove();
+  const plat=window._rpfSelPlat||'all';
+  const selStrats=window._rpfSelStrats||[];
+  // Build filtered list
+  let list=filterT(trades,recF,plat);
+  if(selStrats.length){
+    list=list.filter(t=>{
+      const ts=Array.isArray(t.strats)?t.strats:[t.strat||''].filter(Boolean);
+      return ts.some(s=>selStrats.includes(s));
+    });
+  }
+  if(!list.length){alert('沒有符合條件的交易記錄');return;}
+  if(mode==='notion') _exportNotionReportWithList(list);
+  else _exportShareReportWithList(list);
+}
+
+
+function exportNotionReport(){ showReportFilter('notion'); }
+function exportShareReport(){ showReportFilter('share'); }
+
+function _exportNotionReportWithList(list){
   if(!list.length){alert('沒有資料可匯出');return;}
 
   const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
