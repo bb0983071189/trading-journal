@@ -820,6 +820,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <button class="fc" onclick="setF(this,'loss')">虧損</button>
     <div style="margin-left:auto;display:flex;gap:6px">
       <button class="btn btn-g" onclick="exportCSV()" style="padding:5px 11px;font-size:12px">匯出 CSV</button>
+      <button class="btn" onclick="exportNotionReport()" style="padding:5px 11px;font-size:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);cursor:pointer">📋 Notion 報表</button>
       <button class="btn btn-r" onclick="clearAll()" style="padding:5px 11px;font-size:12px">清除全部</button>
     </div>
   </div>
@@ -2743,6 +2744,92 @@ function exportCSV(){
   a.download='交易日誌_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 function clearAll(){if(!confirm('確定清除所有交易紀錄？此操作無法復原。'))return;trades=[];saveLS();fbClearAll();renderRec();}
+
+function exportNotionReport(){
+  const list=filterT(trades,recF);
+  if(!list.length){alert('沒有資料可匯出');return;}
+  const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
+  const dirBg=d=>d==='做多'?'#dcfce7':'#fee2e2';
+  const pnlColor=p=>p>0?'#16a34a':p<0?'#dc2626':'#6b7280';
+  const xrColor=r=>{const m={tp1:'#22c55e',tp2:'#16a34a',tp3:'#15803d',sl:'#ef4444',be:'#f59e0b',manual:'#6b7280',liq:'#7c3aed'};return m[r]||'#6b7280';};
+  const xrBg=r=>{const m={tp1:'#dcfce7',tp2:'#bbf7d0',tp3:'#86efac',sl:'#fee2e2',be:'#fef3c7',manual:'#f3f4f6',liq:'#ede9fe'};return m[r]||'#f3f4f6';};
+  const xrLabel=r=>{const m={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',sl:'止損 SL',be:'平保',manual:'手動',liq:'強平'};return m[r]||r||'—';};
+  const tag=(txt,color,bg)=>`<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:${color};background:${bg};white-space:nowrap">${txt}</span>`;
+  const cell=(content,align='left',extra='')=>`<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;text-align:${align};white-space:nowrap;${extra}">${content}</td>`;
+  const today=new Date().toLocaleDateString('zh-TW');
+  const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
+  const wins=list.filter(t=>(t.netPnl||0)>0).length;
+  const wr=list.length?Math.round(wins/list.length*100):0;
+  const rows=list.map((t,i)=>{
+    const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
+    const exLabel=t.exchange+(t.isOP?' (OP)':'');
+    return`<tr style="background:${i%2===0?'#fff':'#f9fafb'}">
+      ${cell(`<b style="color:#111">${t.symbol||'—'}</b>`)}
+      ${cell(t.date||'—')}
+      ${cell((t.etime||'—')+'<br><span style="color:#9ca3af;font-size:11px">'+(t.xtime||'—')+'</span>')}
+      ${cell(tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir)),'center')}
+      ${cell(`<span style="font-size:11px;color:#6b7280">${exLabel}</span>`)}
+      ${cell(t.lev?t.lev+'x':'—','center')}
+      ${cell(t.entry||'—','right')}
+      ${cell(t.exit||'—','right')}
+      ${cell(t.sl||'—','right','color:#ef4444')}
+      ${cell([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—','right','color:#22c55e')}
+      ${cell(tag(xrLabel(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason)),'center')}
+      ${cell(strats||'—')}
+      ${cell(t.tf||'—','center')}
+      ${cell(`<b style="color:${pnlColor(t.netPnl||0)}">${(t.netPnl||0)>0?'+':''}${(t.netPnl||0).toFixed(2)} U</b>`,'right')}
+      ${cell(`<span style="color:${t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280'};font-weight:700">${t.grade||'—'} (${t.score||0})</span>`,'center')}
+      ${cell(`<span style="color:#6b7280;font-size:12px;white-space:normal;max-width:180px;display:block">${t.notes||'—'}</span>`)}
+    </tr>`;
+  }).join('');
+  const html=`<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
+  <title>交易日誌報表 — ${today}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#1f2937;padding:32px}
+    .report-header{margin-bottom:28px}
+    .report-title{font-size:28px;font-weight:800;color:#111;display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .report-date{font-size:13px;color:#9ca3af;margin-bottom:20px}
+    .stats-row{display:flex;gap:16px;margin-bottom:28px;flex-wrap:wrap}
+    .stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 22px;min-width:130px}
+    .stat-label{font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+    .stat-val{font-size:22px;font-weight:800;color:#111}
+    .stat-val.green{color:#16a34a}.stat-val.red{color:#dc2626}
+    .table-wrap{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#f9fafb}
+    thead th{padding:10px 14px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e5e7eb;white-space:nowrap;text-align:left}
+    @media print{body{padding:16px}.no-print{display:none!important}}
+    .print-btn{background:#6366f1;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-right:10px}
+    .print-btn:hover{background:#4f46e5}
+  </style>
+  </head><body>
+  <div class="report-header">
+    <div class="report-title">📋 交易日誌 Pro — 報表</div>
+    <div class="report-date">產生時間：${today} ｜ 共 ${list.length} 筆紀錄</div>
+    <div class="no-print" style="margin-bottom:20px">
+      <button class="print-btn" onclick="window.print()">🖨️ 列印 / 存為 PDF</button>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">總筆數</div><div class="stat-val">${list.length}</div></div>
+      <div class="stat-card"><div class="stat-label">勝率</div><div class="stat-val ${wr>=50?'green':'red'}">${wr}%</div></div>
+      <div class="stat-card"><div class="stat-label">總損益</div><div class="stat-val ${totalPnl>=0?'green':'red'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} U</div></div>
+      <div class="stat-card"><div class="stat-label">獲利筆數</div><div class="stat-val green">${wins}</div></div>
+      <div class="stat-card"><div class="stat-label">虧損筆數</div><div class="stat-val red">${list.length-wins}</div></div>
+    </div>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th>品種</th><th>日期</th><th>進場/出場時間</th><th style="text-align:center">方向</th><th>交易所</th><th style="text-align:center">槓桿</th>
+      <th style="text-align:right">進場價</th><th style="text-align:right">出場價</th><th style="text-align:right">止損</th><th style="text-align:right">TP</th>
+      <th style="text-align:center">出場原因</th><th>策略</th><th style="text-align:center">週期</th>
+      <th style="text-align:right">損益</th><th style="text-align:center">評分</th><th>備注</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  </body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();
+}
 
 document.getElementById('edit-modal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
 document.getElementById('exit-modal').addEventListener('click',function(e){if(e.target===this)closeExitModal();});
