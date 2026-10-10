@@ -1125,6 +1125,10 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 </div>
 
 <script>
+// ── Cloudflare Worker URL ──
+const WORKER_URL = localStorage.getItem('worker_url') || 'https://trading-api-proxy.bb0983071189.workers.dev';
+window._workerUrl = WORKER_URL;
+
 // ===== FTMO FEE RULES =====
 // Based on FTMO commission structure (per lot, round-trip)
 // Forex pairs: $3/lot round-trip (approx $1.5/lot per side × 100,000 notional)
@@ -3331,10 +3335,7 @@ function loadApiKeys(){
   if(wInput)wInput.value=wu;
 
 }
-// ── Cloudflare Worker URL ──
-// 部署 Worker 後填入你的 Worker URL，存在 localStorage
-const WORKER_URL = localStorage.getItem('worker_url') || 'https://trading-api-proxy.bb0983071189.workers.dev';
-window._workerUrl = WORKER_URL;
+// WORKER_URL moved to top of script
 
 function getApiKeys(){
   return{
