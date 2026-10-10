@@ -400,6 +400,9 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   .wr-header-row,.wr-row{grid-template-columns:80px 1fr 42px 50px}
   .wr-header-row .wr-h-n,.wr-n{display:none}
 }
+
+  .tf-chip{padding:4px 12px;border-radius:20px;border:1px solid #e5e7eb;background:#f9fafb;font-size:12px;font-weight:600;color:#6b7280;cursor:pointer;transition:all .15s}
+  .tf-chip.on{background:var(--indigo-bg,#eef2ff);border-color:#818cf8;color:#4f46e5}
 </style>
 </head>
 <body>
@@ -673,8 +676,17 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       </div>
       <div class="strat-selected" id="strat-selected">尚未選擇策略</div>
       <div class="g2" style="margin-top:9px">
-        <div class="f"><label>分析週期</label>
-          <select id="p1-tf"><option value="">選擇</option><option>1m</option><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1D</option></select>
+        <div class="f"><label>分析週期（可複選）</label>
+          <div id="tf-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+            <button type="button" class="tf-chip" data-tf="1m" onclick="toggleTf('1m',this)">1m</button>
+            <button type="button" class="tf-chip" data-tf="3m" onclick="toggleTf('3m',this)">3m</button>
+            <button type="button" class="tf-chip" data-tf="5m" onclick="toggleTf('5m',this)">5m</button>
+            <button type="button" class="tf-chip" data-tf="15m" onclick="toggleTf('15m',this)">15m</button>
+            <button type="button" class="tf-chip" data-tf="30m" onclick="toggleTf('30m',this)">30m</button>
+            <button type="button" class="tf-chip" data-tf="1h" onclick="toggleTf('1h',this)">1h</button>
+            <button type="button" class="tf-chip" data-tf="4h" onclick="toggleTf('4h',this)">4h</button>
+            <button type="button" class="tf-chip" data-tf="1D" onclick="toggleTf('1D',this)">1D</button>
+          </div>
         </div>
       </div>
       <div style="margin-top:9px"><div class="f"><label>進場理由</label><textarea id="p1-reason" placeholder="用自己的話寫就好…"></textarea></div></div>
@@ -825,6 +837,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <div style="margin-left:auto;display:flex;gap:6px">
       <button class="btn btn-g" onclick="exportCSV()" style="padding:5px 11px;font-size:12px">匯出 CSV</button>
       <button class="btn" onclick="exportNotionReport()" style="padding:5px 11px;font-size:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);cursor:pointer">📋 Notion 報表</button>
+      <button class="btn" onclick="exportShareReport()" style="padding:5px 11px;font-size:12px;background:#6366f1;color:#fff;border:none;border-radius:var(--rs);cursor:pointer">🔗 分享連結</button>
       <button class="btn btn-r" onclick="clearAll()" style="padding:5px 11px;font-size:12px">清除全部</button>
     </div>
   </div>
@@ -1848,6 +1861,8 @@ function openEditModal(id){
   set('e-notes',t.notes);
   renderEditImgPreview('entry');
   renderEditImgPreview('exit');
+  // Load tf chips for edit modal (reuse main form chips)
+  setTfChips(t.tf||'');
   closeModal();
   document.getElementById('edit-modal').classList.add('show');
 }
@@ -1887,6 +1902,7 @@ function saveEdit(){
     exitReason:xr,
     exitReasonLabel:xrMap[xr]||xr,
     netPnl:getN('e-pnl'),
+    tf:getTfValue(),
     reason:get('e-reason'),
     notes:get('e-notes'),
     images:editImgEntry.slice(),
@@ -1944,7 +1960,7 @@ function saveEntryNow(){
     symbol:gv('p1-sym'),dir:S.dir,lev:S.lev,margin:S.margin,
     notional:S.notional,entry:S.entry,sl:S.sl,tp1:S.tp1,tp2:S.tp2,tp3:S.tp3,
     tpMode:S.tpMode,takerRate:S.takerRate,
-    strats:S.strats.slice(),tf:gv('p1-tf'),emotion:S.emotion,
+    strats:S.strats.slice(),tf:getTfValue(),emotion:S.emotion,
     reason:gv('p1-reason'),
     images:currentImages.slice(),
     // open position fields (empty until exit)
@@ -2155,7 +2171,7 @@ function saveTrade(){
     tpMode:S.tpMode,exit:S.exit,closePct:S.closePct,
     exitReason:gv('p2-xr'),exitReasonLabel:xrMap[gv('p2-xr')]||gv('p2-xr'),
     netPnl:parseFloat(S.netPnl.toFixed(4)),takerRate:S.takerRate,
-    strats:S.strats.slice(),tf:gv('p1-tf'),emotion:S.emotion,
+    strats:S.strats.slice(),tf:getTfValue(),emotion:S.emotion,
     reason:gv('p1-reason'),notes:gv('p2-notes'),
     images:currentImages.slice(),
     exitImages:currentExitImages.slice(),
@@ -2169,7 +2185,7 @@ function saveTrade(){
 
 // ===== RESET =====
 function resetForm(){
-  const ids=['p1-sym','p1-date','p1-etime','p1-margin','p1-notional','p1-entry','p1-sl','p1-liq','p1-fee','p1-tf','p1-reason','tp1-p','tp1-n','tp1-pct','tp1-pnl','tp1-rr','tp2-p','tp2-n','tp2-pct','tp2-pnl','tp2-rr','tp3-p','tp3-n','tp3-pct','tp3-pnl','tp3-rr','p2-exit','p2-xtime','p2-notes'];
+  const ids=['p1-sym','p1-date','p1-etime','p1-margin','p1-notional','p1-entry','p1-sl','p1-liq','p1-fee','p1-reason','tp1-p','tp1-n','tp1-pct','tp1-pnl','tp1-rr','tp2-p','tp2-n','tp2-pct','tp2-pnl','tp2-rr','tp3-p','tp3-n','tp3-pct','tp3-pnl','tp3-rr','p2-exit','p2-xtime','p2-notes'];
   ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('p1-lev').value='20';
   document.getElementById('p1-dir').selectedIndex=0;
@@ -2208,7 +2224,7 @@ function resetForm(){
   document.getElementById('label-notional').textContent='名目倉位（自動）';
   document.getElementById('lev-field').style.opacity='1';
   document.getElementById('liq-field').style.display='';
-  Object.assign(S,{exchange:'',platform:'crypto',takerRate:0,ftmoType:'',isOP:false,emotion:'',strats:[],dir:'',lev:20,margin:0,notional:0,entry:0,sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,exit:0,closePct:1,netPnl:0,score:0,p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null});
+  Object.assign(S,{exchange:'',platform:'crypto',takerRate:0,ftmoType:'',isOP:false,emotion:'',strats:[],tfs:[],dir:'',lev:20,margin:0,notional:0,entry:0,sl:0,tp1:0,tp2:0,tp3:0,tpMode:1,exit:0,closePct:1,netPnl:0,score:0,p1HasPlan:null,p1HasSL:null,p1BigTF:null,p1Chase:null,p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null});
   [1,2,3].forEach(i=>{sv('pd'+i,i);document.getElementById('pd'+i).className='ph-dot '+(i===1?'dot-active':'dot-idle');});
   document.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));
   updateStratGrid();
@@ -2757,6 +2773,88 @@ function exportCSV(){
   a.download='交易日誌_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 function clearAll(){if(!confirm('確定清除所有交易紀錄？此操作無法復原。'))return;trades=[];saveLS();fbClearAll();renderRec();}
+
+function toggleTf(tf, btn){
+  if(!S.tfs)S.tfs=[];
+  const idx=S.tfs.indexOf(tf);
+  if(idx>-1){S.tfs.splice(idx,1);btn.classList.remove('on');}
+  else{S.tfs.push(tf);btn.classList.add('on');}
+}
+function getTfValue(){
+  // Returns comma-joined string for storage, or reads from chips
+  return (S.tfs&&S.tfs.length)?S.tfs.join(','):'';
+}
+function setTfChips(tfStr){
+  S.tfs=(tfStr||'').split(',').filter(Boolean);
+  document.querySelectorAll('.tf-chip').forEach(b=>{
+    b.classList.toggle('on', S.tfs.includes(b.dataset.tf));
+  });
+}
+function clearTfChips(){
+  S.tfs=[];
+  document.querySelectorAll('.tf-chip').forEach(b=>b.classList.remove('on'));
+}
+
+
+function exportShareReport(){
+  const list=filterT(trades,recF);
+  if(!list.length){alert('沒有資料可匯出');return;}
+
+  // Strip sensitive fields
+  const safeList=list.map(t=>({
+    symbol:t.symbol,exchange:t.exchange,isOP:t.isOP,date:t.date,
+    etime:t.etime,xtime:t.xtime,dir:t.dir,lev:t.lev,
+    entry:t.entry,exit:t.exit,sl:t.sl,tp1:t.tp1,tp2:t.tp2,tp3:t.tp3,
+    exitReason:t.exitReason,strats:t.strats,strat:t.strat,
+    tf:t.tf,netPnl:t.netPnl,score:t.score,grade:t.grade,
+    reason:t.reason,notes:t.notes,emotion:t.emotion,
+    images:t.images,exitImages:t.exitImages
+  }));
+
+  const btn=document.querySelector('[onclick="exportShareReport()"]');
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.textContent='上傳中…';btn.disabled=true;}
+
+  const JSONBIN_KEY='$2a$10$sToV8FDBwkmzqZQcBkFJJ.g5I6msTVShRFVGiyrLmOGyJkS5VcZZq';
+
+  fetch('https://api.jsonbin.io/v3/b',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'X-Master-Key':JSONBIN_KEY,
+      'X-Bin-Name':'交易報表 '+new Date().toLocaleDateString('zh-TW'),
+      'X-Bin-Private':'false'
+    },
+    body:JSON.stringify({trades:safeList,generatedAt:new Date().toISOString()})
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    if(btn){btn.textContent=orig;btn.disabled=false;}
+    const binId=data?.metadata?.id;
+    if(!binId){alert('上傳失敗：'+JSON.stringify(data));return;}
+    // Build viewer URL using same GitHub Pages host + ?bin=ID
+    const viewerUrl=location.origin+location.pathname+'?report='+binId;
+    // Show share dialog
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:20px;font-weight:800;color:#111;margin-bottom:8px">🔗 分享連結已產生！</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:16px">複製以下連結分享給別人，對方不需要登入即可查看你的交易記錄。<br><span style="color:#ef4444;font-size:12px">⚠️ API Keys 已從報表中移除，資料安全。</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input id="share-url-input" value="${viewerUrl}" readonly style="flex:1;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#374151;background:#f9fafb">
+        <button onclick="navigator.clipboard.writeText('${viewerUrl}').then(()=>{this.textContent='✓ 已複製';setTimeout(()=>this.textContent='複製',2000)})" style="background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap">複製</button>
+      </div>
+      <div style="font-size:12px;color:#9ca3af;margin-bottom:16px">Bin ID: ${binId}</div>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;background:#f3f4f6;border:none;border-radius:8px;padding:10px;cursor:pointer;font-size:14px;font-weight:600;color:#374151">關閉</button>
+    </div>`;
+    document.body.appendChild(overlay);
+  })
+  .catch(err=>{
+    if(btn){btn.textContent=orig;btn.disabled=false;}
+    alert('上傳失敗：'+err.message);
+  });
+}
+
 
 function exportNotionReport(){
   const list=filterT(trades,recF);
@@ -3869,6 +3967,186 @@ if(window._fbReady){
     if(!window._fbReady) setSyncStatus('offline','離線模式');
   }, 5000);
 }
+
+// ── 分享報表檢視器 ──
+(function(){
+  const params=new URLSearchParams(location.search);
+  const binId=params.get('report');
+  if(!binId)return;
+
+  const JSONBIN_KEY='$2a$10$sToV8FDBwkmzqZQcBkFJJ.g5I6msTVShRFVGiyrLmOGyJkS5VcZZq';
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    // Hide main app, show loading
+    document.body.innerHTML=`<div id="rv-root" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;background:#fff">
+      <div id="rv-loading" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px">
+        <div style="font-size:32px">📋</div>
+        <div style="font-size:16px;color:#6b7280">載入報表中…</div>
+      </div>
+    </div>`;
+
+    fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{
+      headers:{'X-Master-Key':JSONBIN_KEY,'X-Bin-Meta':'false'}
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      const trades=data?.trades||data?.record?.trades||[];
+      if(!trades.length){
+        document.getElementById('rv-loading').innerHTML='<div style="color:#ef4444;font-size:16px">找不到報表資料</div>';
+        return;
+      }
+      renderReportViewer(trades);
+    })
+    .catch(err=>{
+      document.getElementById('rv-loading').innerHTML=`<div style="color:#ef4444">載入失敗：${err.message}</div>`;
+    });
+  });
+
+  function renderReportViewer(list){
+    const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
+    const dirBg=d=>d==='做多'?'#dcfce7':'#fee2e2';
+    const pnlColor=p=>p>0?'#16a34a':p<0?'#dc2626':'#6b7280';
+    const xrColor=r=>{const m={tp1:'#22c55e',tp2:'#16a34a',tp3:'#15803d',sl:'#ef4444',be:'#f59e0b',manual:'#6b7280',liq:'#7c3aed'};return m[r]||'#6b7280';};
+    const xrBg=r=>{const m={tp1:'#dcfce7',tp2:'#bbf7d0',tp3:'#86efac',sl:'#fee2e2',be:'#fef3c7',manual:'#f3f4f6',liq:'#ede9fe'};return m[r]||'#f3f4f6';};
+    const xrLbl=r=>{const m={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',sl:'止損 SL',be:'平保',manual:'手動',liq:'強平'};return m[r]||r||'—';};
+    const tag=(txt,c,bg)=>`<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:${c};background:${bg}">${txt}</span>`;
+    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
+    const wins=list.filter(t=>(t.netPnl||0)>0).length;
+    const wr=list.length?Math.round(wins/list.length*100):0;
+
+    const rowsHtml=list.map((t,i)=>{
+      const pnl=t.netPnl||0;
+      const exLabel=t.exchange+(t.isOP?' (OP)':'');
+      const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
+      const gc=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
+      return`<tr class="rv-row" data-idx="${i}" style="cursor:pointer;border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#f5f5ff'" onmouseout="this.style.background=''">
+        <td style="padding:10px 12px"><div style="font-weight:700;font-size:14px;color:#111">${esc(t.symbol||'—')}</div><div style="font-size:10px;color:#9ca3af">${esc(exLabel)}</div></td>
+        <td style="padding:10px 12px;font-size:13px;color:#6b7280">${esc(t.date||'—')}</td>
+        <td style="padding:10px 12px;text-align:center">${tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${t.lev?t.lev+'x':'—'}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(t.entry||'—')}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(t.exit||'—')}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#ef4444">${esc(t.sl||'—')}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${esc(t.tp1||'—')}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${esc(t.tp2||'—')}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${esc(t.tp3||'—')}</td>
+        <td style="padding:10px 12px;text-align:center">${tag(xrLbl(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(strats)}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(t.tf||'—')}</td>
+        <td style="padding:10px 12px;font-weight:700;font-size:14px;text-align:right;color:${pnlColor(pnl)}">${pnl>0?'+':''}${pnl.toFixed(2)} U</td>
+        <td style="padding:10px 12px;text-align:center;font-weight:700;color:${gc}">${esc(t.grade||'—')} <span style="font-weight:400;font-size:11px;color:#9ca3af">(${t.score||0})</span></td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('rv-root').innerHTML=`
+      <div id="rv-list">
+        <div style="padding:16px 20px 12px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:#fff;z-index:10">
+          <div style="font-size:20px;font-weight:800;color:#111;margin-bottom:4px">📋 交易報表</div>
+          <div style="font-size:12px;color:#9ca3af;margin-bottom:12px">共 ${list.length} 筆 ｜ 點擊任一行查看詳情</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px 14px"><div style="font-size:11px;color:#9ca3af">總筆數</div><div style="font-size:18px;font-weight:800;color:#111">${list.length}</div></div>
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px 14px"><div style="font-size:11px;color:#9ca3af">勝率</div><div style="font-size:18px;font-weight:800;color:${wr>=50?'#16a34a':'#dc2626'}">${wr}%</div></div>
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px 14px"><div style="font-size:11px;color:#9ca3af">總損益</div><div style="font-size:18px;font-weight:800;color:${totalPnl>=0?'#16a34a':'#dc2626'}">${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} U</div></div>
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px 14px"><div style="font-size:11px;color:#9ca3af">獲利</div><div style="font-size:18px;font-weight:800;color:#16a34a">${wins}</div></div>
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px 14px"><div style="font-size:11px;color:#9ca3af">虧損</div><div style="font-size:18px;font-weight:800;color:#dc2626">${list.length-wins}</div></div>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;min-width:900px">
+            <thead><tr style="border-bottom:2px solid #e5e7eb">
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:left;white-space:nowrap">品種/交易所</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:left;white-space:nowrap">日期</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">方向</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">槓桿</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">進場價</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">出場價</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">止損</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">TP1</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">TP2</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">TP3</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">出場原因</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">策略</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">週期</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:right;white-space:nowrap">損益</th>
+              <th style="padding:8px 12px;font-size:11px;font-weight:600;color:#9ca3af;text-align:center;white-space:nowrap">評分</th>
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>
+      <div id="rv-detail" style="display:none"></div>
+      <div id="rv-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:999999;align-items:center;justify-content:center;cursor:zoom-out" onclick="this.style.display='none'"><img style="max-width:94vw;max-height:92vh;border-radius:10px"></div>
+    `;
+
+    window._rvTrades=list;
+    window._rvIdx=-1;
+
+    document.querySelectorAll('.rv-row').forEach(row=>{
+      row.addEventListener('click',()=>rvShowDetail(parseInt(row.dataset.idx)));
+    });
+  }
+
+  window.rvShowDetail=function(idx){
+    window._rvIdx=idx;
+    const t=window._rvTrades[idx];
+    const list=window._rvTrades;
+    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const pnl=t.netPnl||0;
+    const pnlColor=p=>p>0?'#16a34a':p<0?'#dc2626':'#6b7280';
+    const dirColor=d=>d==='做多'?'#22c55e':'#ef4444';
+    const dirBg=d=>d==='做多'?'#dcfce7':'#fee2e2';
+    const xrC=r=>{const m={tp1:'#22c55e',sl:'#ef4444',be:'#f59e0b',manual:'#6b7280',liq:'#7c3aed'};return m[r]||'#6b7280';};
+    const xrB=r=>{const m={tp1:'#dcfce7',sl:'#fee2e2',be:'#fef3c7',manual:'#f3f4f6',liq:'#ede9fe'};return m[r]||'#f3f4f6';};
+    const xrL=r=>{const m={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',sl:'止損 SL',be:'平保',manual:'手動',liq:'強平'};return m[r]||r||'—';};
+    const tag=(txt,c,b)=>`<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:${c};background:${b}">${txt}</span>`;
+    const gc=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
+    const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
+    function toBullets(text){if(!text||!text.trim())return'<p style="color:#c0c0c0;font-style:italic;font-size:13px;padding:8px 0">尚無內容</p>';const lines=text.split(/\n/).filter(l=>l.trim());return'<ul style="list-style:none;padding:0;margin:4px 0">'+lines.map(l=>`<li style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;font-size:14px;line-height:1.6;color:#374151"><span style="color:#f59e0b;font-size:11px;margin-top:4px;flex-shrink:0">◆</span><span>${esc(l)}</span></li>`).join('')+'</ul>';}
+    function photoGrid(imgs){if(!imgs||!imgs.length)return'<p style="color:#c0c0c0;font-style:italic;font-size:13px;padding:8px 0">尚無截圖</p>';return'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:8px">'+imgs.map(src=>`<div onclick="rvOpenLb('${src.replace(/'/g,"\\'")}');" style="aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;cursor:pointer;background:#f3f4f6"><img src="${esc(src)}" loading="lazy" style="width:100%;height:100%;object-fit:cover"></div>`).join('')+'</div>';}
+    function prop(l,v){return`<tr><td style="color:#9ca3af;font-size:14px;padding:7px 0;width:40%;vertical-align:top">${l}</td><td style="color:#111;font-size:14px;padding:7px 0">${v}</td></tr>`;}
+    function section(icon,title,body){return`<div style="margin-bottom:28px"><div style="font-size:16px;font-weight:700;color:#111;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">${icon} ${title}</div>${body}</div>`;}
+    window.scrollTo(0,0);
+    document.getElementById('rv-list').style.display='none';
+    const det=document.getElementById('rv-detail');
+    det.style.display='block';
+    det.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:#fff;z-index:10">
+        <button onclick="rvGoBack()" style="color:#6366f1;background:none;border:none;cursor:pointer;font-weight:600;font-size:15px">← 返回清單</button>
+        <div style="font-size:12px;color:#9ca3af">${idx+1} / ${list.length}</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="rvNavTo(-1)" style="background:#f3f4f6;border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">← 上一筆</button>
+          <button onclick="rvNavTo(1)" style="background:#f3f4f6;border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">下一筆 →</button>
+        </div>
+      </div>
+      <div style="padding:32px 24px 60px;max-width:720px;margin:0 auto">
+        <div style="font-size:32px;font-weight:800;color:#111;margin-bottom:4px">${esc(t.symbol||'—')}</div>
+        <div style="font-size:13px;color:#9ca3af;margin-bottom:16px">${esc(t.date||'—')} ｜ ${esc(t.exchange+(t.isOP?' (OP)':''))}</div>
+        <div style="font-size:28px;font-weight:800;margin-bottom:24px;color:${pnlColor(pnl)}">${pnl>0?'+':''}${pnl.toFixed(2)} U</div>
+        <table style="width:100%;margin-bottom:28px">
+          ${prop('方向',tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir)))}
+          ${prop('出場原因',tag(xrL(t.exitReason),xrC(t.exitReason),xrB(t.exitReason)))}
+          ${prop('進場/出場',esc((t.etime||'—')+' → '+(t.xtime||'—')))}
+          ${prop('進場價 / 出場價',esc((t.entry||'—')+' / '+(t.exit||'—')))}
+          ${prop('止損','<span style="color:#ef4444">'+esc(t.sl||'—')+'</span>')}
+          ${prop('TP1/TP2/TP3','<span style="color:#22c55e">'+esc([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—')+'</span>')}
+          ${prop('槓桿',t.lev?esc(t.lev)+'x':'—')}
+          ${prop('策略',esc(strats))}
+          ${prop('週期',esc(t.tf||'—'))}
+          ${prop('評分','<span style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</span>')}
+        </table>
+        ${section('📷','進場截圖',photoGrid(t.images))}
+        ${section('📷','出場截圖',photoGrid(t.exitImages))}
+        ${section('💡','進場邏輯',toBullets(t.reason))}
+        ${section('🚪','出場/複盤',toBullets(t.notes))}
+      </div>
+    `;
+  };
+  window.rvGoBack=function(){document.getElementById('rv-detail').style.display='none';document.getElementById('rv-list').style.display='block';window.scrollTo(0,0);};
+  window.rvNavTo=function(dir){const n=window._rvIdx+dir;if(n>=0&&n<window._rvTrades.length)rvShowDetail(n);};
+  window.rvOpenLb=function(src){const lb=document.getElementById('rv-lb');lb.querySelector('img').src=src;lb.style.display='flex';};
+  document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')rvNavTo(-1);if(e.key==='ArrowRight')rvNavTo(1);if(e.key==='Escape')rvGoBack();});
+})();
 </script>
 </body>
 </html>
