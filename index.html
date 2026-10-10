@@ -2777,7 +2777,7 @@ function exportNotionReport(){
     const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const pnl=t.netPnl||0;
     const gradeColor=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
-    return`<tr class="trade-row" data-id="${t.id}" style="cursor:pointer;background:${i%2===0?'#fff':'#f9fafb'};transition:background .15s" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${i%2===0?'#fff':'#f9fafb'}'" onclick="openDetail(${t.id})">
+    return`<tr class="trade-row" data-idx="${i}" style="cursor:pointer;background:${i%2===0?'#fff':'#f9fafb'};transition:background .15s" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${i%2===0?'#fff':'#f9fafb'}'" onclick="openDetailByIdx(${i})">
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap"><b style="color:#111;font-size:14px">${t.symbol||'—'}</b><span style="display:block;font-size:10px;color:#9ca3af;margin-top:1px">${exLabel}</span></td>
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;white-space:nowrap">${t.date||'—'}</td>
       <td style="padding:11px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;white-space:nowrap">${t.etime||'—'}<span style="display:block;color:#9ca3af;font-size:11px">${t.xtime||'—'}</span></td>
@@ -2917,13 +2917,12 @@ function exportNotionReport(){
   const gradeColor=g=>g==='S'?'#7c3aed':g==='A'?'#2563eb':g==='B'?'#16a34a':g==='C'?'#d97706':'#6b7280';
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  function openDetail(id){
-    const idx=TRADES.findIndex(t=>t.id===id);
-    if(idx<0)return;
+  function openDetailByIdx(idx){
+    if(idx<0||idx>=TRADES.length)return;
     currentIdx=idx;
     renderDetail(TRADES[idx]);
     document.getElementById('detail-panel').classList.add('open');
-    highlightRow(id);
+    highlightRow(idx);
   }
   function closeDetail(){
     document.getElementById('detail-panel').classList.remove('open');
@@ -2935,11 +2934,11 @@ function exportNotionReport(){
     if(next<0||next>=TRADES.length)return;
     currentIdx=next;
     renderDetail(TRADES[currentIdx]);
-    highlightRow(TRADES[currentIdx].id);
+    highlightRow(currentIdx);
   }
-  function highlightRow(id){
+  function highlightRow(idx){
     document.querySelectorAll('.trade-row').forEach(r=>{
-      r.style.outline=r.dataset.id==id?'2px solid #6366f1':'';
+      r.style.outline=r.dataset.idx==idx?'2px solid #6366f1':'';
     });
   }
   function photoGrid(imgs){
