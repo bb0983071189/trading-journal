@@ -410,7 +410,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   <button class="nav-tab" onclick="showPage('report')">報表</button>
   <div class="sync-bar offline" id="sync-bar">
     <span class="sync-dot" id="sync-dot"></span>
-    <span id="sync-txt">載入中…</span>
+    <span id="sync-txt">連線中…</span>
   </div>
 </nav>
 
@@ -1243,18 +1243,11 @@ function mergeImagesIntoTrades(list){
 }
 
 function initFirebase(){
-  if(!window._fbReady){ setSyncStatus('offline','離線模式');return; }
+  if(!window._fbReady){ setSyncStatus('offline','載入中');return; }
   const {onSnapshot,tradesCol}=window._fb;
   setSyncStatus('syncing','連線中…');
-  // Timeout: if onSnapshot doesn't fire within 8s, show error
-  let firstSnap=false;
-  const connTimeout=setTimeout(()=>{
-    if(!firstSnap) setSyncStatus('error','連線逾時，請重新整理');
-  }, 8000);
   // Real-time listener — fires on any device change
   onSnapshot(tradesCol, snap=>{
-    firstSnap=true;
-    clearTimeout(connTimeout);
     const remote=snap.docs.map(d=>({...d.data(),id:Number(d.id)||d.id}));
     remote.sort((a,b)=>b.id-a.id);
     trades=mergeImagesIntoTrades(remote);
@@ -1263,10 +1256,8 @@ function initFirebase(){
     if(document.getElementById('page-report').classList.contains('on'))renderRep();
     setSyncStatus('synced','已同步 ✓');
   }, err=>{
-    firstSnap=true;
-    clearTimeout(connTimeout);
     console.error('Firestore listener error',err);
-    setSyncStatus('error','連線失敗: '+err.code);
+    setSyncStatus('error','連線失敗');
   });
 }
 
@@ -2859,7 +2850,7 @@ function exportNotionReport(){
       #view-detail{display:block!important}
     }
   </style>
-  <\/head><body>
+  </head><body>
   <div class="lb" id="lb" onclick="closeLb()"><img id="lb-img" src=""></div>
 
   <!-- LIST VIEW -->
@@ -2989,8 +2980,8 @@ function exportNotionReport(){
     if(e.key==='ArrowLeft')navTo(-1);
     if(e.key==='ArrowRight')navTo(1);
   });
-  <\/script>
-  <\/body><\/html>`;
+  </script>
+  </body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 }
 
