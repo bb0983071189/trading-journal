@@ -3540,8 +3540,8 @@ function applyExitFill(o,exchange){
       openFee=Math.abs(netPnl-(gross-closeFee)); // 反推開倉手續費供顯示用
       totalFee=closeFee+openFee;
     } else {
-      // Fallback: profit - closeFee - openCommission
-      openFee=parseFloat(o._openCommission||0);
+      // Fallback: commission 是平倉手續費，估算開倉手續費≈平倉手續費
+      openFee=parseFloat(o._openCommission||closeFee); // 開倉費≈平倉費（同費率）
       totalFee=closeFee+openFee;
       netPnl=gross-totalFee;
     }
@@ -3565,18 +3565,16 @@ function applyExitFill(o,exchange){
   set('ex-xtime',d.toTimeString().slice(0,5));
   if(xrLabel)document.getElementById('ex-xr').value=xrLabel;
 
-  // Store net pnl from API for saveExitData to use
+  // Store net pnl AFTER set() calls (set triggers oninput which clears _importedExitPnl)
   window._importedExitPnl=netPnl;
   window._importedExitFee=totalFee;
-
-  // Show breakdown in calc box
+  // Show breakdown in calc box with correct API values (after set() to override calcExitPnl estimate)
   const calcBox=document.getElementById('ex-calc-box');
   const grossEl=document.getElementById('ex-gross');
   const feeEl=document.getElementById('ex-fee-display');
   const netEl=document.getElementById('ex-net');
   if(calcBox&&grossEl&&feeEl&&netEl){
     calcBox.style.display='block';
-    const src=exchange==='OKX'?'OKX':'BingX';
     grossEl.textContent='平倉毛利 '+(gross>=0?'+':'')+gross.toFixed(4)+' USDT';
     feeEl.textContent=totalFee>0?'-'+totalFee.toFixed(4)+' USDT（開+平倉手續費）':'—';
     netEl.textContent=(netPnl>=0?'+':'')+netPnl.toFixed(4)+' USDT';
@@ -4060,9 +4058,13 @@ window.importBingXFill=function(i){
   const sym=o.symbol||'';
   const ts=parseInt(o.updateTime||o.time||Date.now());
   const d=new Date(ts);
-  const pnl=parseFloat(o.profit||0);
+  // 優先用已實現盈虧（含開+平倉手續費）；fallback 用 profit - 平倉手續費
+  const rawProfit=parseFloat(o.profit||0);
+  const closeFeeAbs=Math.abs(parseFloat(o.commission||0));
+  const realizedPnl=o._realizedPnl!==undefined?parseFloat(o._realizedPnl):null;
+  const pnl=realizedPnl!==null?realizedPnl:rawProfit-closeFeeAbs*2; // fallback: 估算開倉手續費≈平倉手續費
+  const fee=realizedPnl!==null?Math.abs(rawProfit-realizedPnl):closeFeeAbs*2;
   const price=parseFloat(o.avgPrice||0);
-  const fee=Math.abs(parseFloat(o.commission||0));
   const qty=parseFloat(o.executedQty||o.origQty||0);
   const lev=parseFloat((o.leverage||'20').toString().replace(/[Xx]/g,''))||20;
   const dir=(o.positionSide==='LONG')?'做多':'做空';
