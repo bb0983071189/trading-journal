@@ -3381,25 +3381,37 @@ async function importExitFromExchange(exchangeOverride){
 
   try{
     let fills=[];
-    if(exchange==='BingX'){
-      const data=await bingxRequest('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
-      const orders=data?.data?.orders||[];
-      fills=orders.filter(o=>
-        o.status==='FILLED'&&
-        (o.reduceOnly===true||o.reduceOnly==='true')&&
-        o.profit!==''&&o.profit!==undefined
-      ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
-
-    } else if(exchange==='BingX2'){
-      const data=await bingx2Request('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
-      const orders=data?.data?.orders||[];
-      fills=orders.filter(o=>
-        o.status==='FILLED'&&
-        (o.reduceOnly===true||o.reduceOnly==='true')&&
-        o.profit!==''&&o.profit!==undefined
-      ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
-      // Mark fills as BingX for applyExitFill logic
-      fills.forEach(o=>o._fromBingX2=true);
+    if(exchange==='BingX'||exchange==='BingX2'){
+      const reqFn2=exchange==='BingX2'?bingx2Request:bingxRequest;
+      // 優先從倉位歷史取已實現盈虧（含手續費）
+      const posHist=await reqFn2('/openApi/swap/v2/trade/positionHistory?symbol='+t.symbol+'&limit=5');
+      const posHistList=posHist?.data?.positionHistory||posHist?.data||[];
+      if(posHistList.length>0){
+        // 將倉位歷史轉成 fill 格式，直接帶入已實現盈虧
+        fills=posHistList.map(p=>({
+          avgPrice: parseFloat(p.closePrice||p.avgClosePrice||0),
+          profit: parseFloat(p.tradingProfit||p.profit||0),        // 平倉毛利
+          commission: Math.abs(parseFloat(p.fee||p.commission||0)), // 手續費（從API直接讀）
+          _realizedPnl: parseFloat(p.realisedProfit??p.realizedPnl??p.netProfit??0), // 已實現盈虧
+          updateTime: parseInt(p.closeTime||p.updateTime||Date.now()),
+          type: p.closeType||'manual',
+          positionSide: p.positionSide||'',
+          _fromBingX2: exchange==='BingX2',
+          _fromPosHistory: true
+        })).filter(p=>p.avgPrice>0);
+      }
+      // Fallback: use allOrders if no position history
+      if(!fills.length){
+        const data=await reqFn2('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
+        const orders=data?.data?.orders||[];
+        fills=orders.filter(o=>
+          o.status==='FILLED'&&
+          (o.reduceOnly===true||o.reduceOnly==='true')&&
+          o.profit!==''&&o.profit!==undefined
+        ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
+        if(exchange==='BingX2') fills.forEach(o=>o._fromBingX2=true);
+      }
+      if(exchange==='BingX2'&&!fills[0]?._fromPosHistory) fills.forEach(o=>o._fromBingX2=true);
 
     } else if(exchange==='OKX'){
       // OKX: orders-history gives pnl(毛利) + fee(手續費，負數)
@@ -3415,42 +3427,7 @@ async function importExitFromExchange(exchangeOverride){
       return;
     }
 
-    // For BingX: use positions-history to get realizedPnl (已實現盈虧，含開+平倉手續費)
-    if(exchange==='BingX'||exchange==='BingX2'){
-      const reqFn=exchange==='BingX2'?bingx2Request:bingxRequest;
-      // Try to fetch position history for realizedPnl
-      const posData=await reqFn('/openApi/swap/v2/trade/positionHistory?symbol='+t.symbol+'&limit=10');
-      const posList=posData?.data?.positionHistory||posData?.data||[];
-      // Match each fill to its position by time proximity
-      fills.forEach(fill=>{
-        const fillTime=parseInt(fill.updateTime||fill.time||0);
-        const matchPos=posList.find(p=>{
-          const closeTime=parseInt(p.closeTime||p.updateTime||0);
-          return Math.abs(closeTime-fillTime)<300000; // within 5 min
-        });
-        const matchRpnl=matchPos?.realisedProfit??matchPos?.realizedPnl;
-        if(matchPos&&matchRpnl!==undefined){
-          fill._realizedPnl=parseFloat(matchRpnl); // 已實現盈虧（含開+平手續費）
-        } else {
-          // Fallback: fetch all orders to sum open commission
-          fill._openCommission=undefined; // will fetch below
-        }
-      });
-      // For fills without position match, fetch open orders commission
-      const needOpenFee=fills.some(f=>f._realizedPnl===undefined);
-      if(needOpenFee){
-        const allData=await reqFn('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=50');
-        const allOrders=allData?.data?.orders||[];
-        const openOrders=allOrders.filter(o=>
-          o.status==='FILLED'&&
-          !(o.reduceOnly===true||o.reduceOnly==='true')
-        );
-        const totalOpenFee=openOrders.reduce((sum,oo)=>sum+Math.abs(parseFloat(oo.commission||0)),0);
-        fills.forEach(fill=>{
-          if(fill._realizedPnl===undefined) fill._openCommission=totalOpenFee;
-        });
-      }
-    }
+    // BingX: 已直接從 positionHistory 取得 _realizedPnl，無需再次匹配
 
     // For OKX: fetch fills-history to get open order fee too
     if(exchange==='OKX'){
