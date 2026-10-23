@@ -3083,7 +3083,7 @@ function _exportNotionReportWithList(list){
       #rpt-overlay .stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px 20px;min-width:90px;flex:1;box-shadow:0 1px 4px rgba(0,0,0,.06)}
       #rpt-overlay .stat-label{font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
       #rpt-overlay .stat-val{font-size:22px;font-weight:800;line-height:1.1}
-      #rpt-overlay thead th{position:sticky;top:60px;z-index:5}
+      #rpt-overlay thead th{position:sticky;top:var(--rpt-thead-top,180px);z-index:5}
     </style>
     <div id="rpt-list-view">
       <!-- ── Header bar ── -->
@@ -3142,6 +3142,16 @@ function _exportNotionReportWithList(list){
   `;
 
   document.body.appendChild(overlay);
+
+  // Dynamically measure sticky header + stat cards height so thead sticks just below them
+  requestAnimationFrame(()=>{
+    const hdr=overlay.querySelector('#rpt-list-view > div:first-child');
+    const stats=overlay.querySelector('#rpt-list-view > div:nth-child(2)');
+    if(hdr&&stats){
+      const top=hdr.offsetHeight+stats.offsetHeight;
+      overlay.style.setProperty('--rpt-thead-top', top+'px');
+    }
+  });
 
   // Store trades data on overlay for access
   overlay._rptTrades = list;
