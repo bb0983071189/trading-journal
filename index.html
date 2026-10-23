@@ -100,6 +100,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 .strat-btn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .strat-btn.on .s2{color:#93c5fd}
 .strat-selected{font-size:11px;color:var(--text2);margin-top:6px;min-height:16px}
+.reason-tag{display:inline-flex;align-items:center;background:var(--accent-light,#eff6ff);color:var(--accent,#3b82f6);border:1px solid var(--accent,#3b82f6);border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:500;white-space:nowrap}
 /* EMOTION */
 .em-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:3px}
 .em-btn{padding:8px 10px;border-radius:var(--rs);cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text);text-align:left;font-family:inherit;transition:all .15s}
@@ -686,10 +687,17 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
             <button type="button" class="tf-chip" data-tf="1h" onclick="toggleTf('1h',this)">1h</button>
             <button type="button" class="tf-chip" data-tf="4h" onclick="toggleTf('4h',this)">4h</button>
             <button type="button" class="tf-chip" data-tf="1D" onclick="toggleTf('1D',this)">1D</button>
+            <button type="button" class="tf-chip" data-tf="1W" onclick="toggleTf('1W',this)">1W</button>
           </div>
         </div>
       </div>
-      <div style="margin-top:9px"><div class="f"><label>進場理由</label><textarea id="p1-reason" placeholder="用自己的話寫就好…"></textarea></div></div>
+      <div style="margin-top:9px">
+        <div class="f">
+          <label>進場邏輯（用頓號「、」分隔多個理由）</label>
+          <textarea id="p1-reason" placeholder="例如：突破壓力位、成交量放大、4h收陽線…" oninput="updateReasonTags()" style="margin-bottom:4px"></textarea>
+          <div id="p1-reason-tags" style="display:flex;flex-wrap:wrap;gap:5px;min-height:0;margin-top:2px"></div>
+        </div>
+      </div>
       <!-- IMAGE UPLOAD -->
       <div style="margin-top:9px">
         <div style="font-size:11px;color:var(--text2);font-weight:500;margin-bottom:5px">📸 TradingView 截圖（可上傳多張）</div>
@@ -2192,6 +2200,7 @@ function saveTrade(){
 function resetForm(){
   const ids=['p1-sym','p1-date','p1-etime','p1-margin','p1-notional','p1-entry','p1-sl','p1-liq','p1-fee','p1-reason','tp1-p','tp1-n','tp1-pct','tp1-pnl','tp1-rr','tp2-p','tp2-n','tp2-pct','tp2-pnl','tp2-rr','tp3-p','tp3-n','tp3-pct','tp3-pnl','tp3-rr','p2-exit','p2-xtime','p2-notes'];
   ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const rtags=document.getElementById('p1-reason-tags');if(rtags)rtags.innerHTML='';
   document.getElementById('p1-lev').value='20';
   document.getElementById('p1-dir').selectedIndex=0;
   document.getElementById('p2-xr').selectedIndex=0;
@@ -2305,7 +2314,11 @@ function showDetail(id){
       <div><div style="font-size:10px;color:var(--text3)">損益</div><div style="font-size:15px;font-weight:700;color:${t.netPnl>=0?'var(--green)':'var(--red)'}">${t.netPnl>=0?'+':''}${(t.netPnl||0).toFixed(2)} U</div></div>
       <div><div style="font-size:10px;color:var(--text3)">評分</div><div style="font-size:13px;color:var(--accent)">${t.score!=null?t.score+'/100':'—'}</div></div>
     </div>
-    ${t.reason?`<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">進場理由</div><div style="font-size:12px;line-height:1.6">${t.reason}</div></div>`:''}
+    ${t.reason?(()=>{
+      const pts=t.reason.split(/\n|、/).map(s=>s.trim()).filter(Boolean);
+      const html=pts.map(p=>`<div style="display:flex;align-items:flex-start;gap:7px;padding:2px 0"><span style="color:#f59e0b;font-size:10px;flex-shrink:0;margin-top:1px">◆</span><span>${p.replace(/</g,'&lt;')}</span></div>`).join('');
+      return `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">進場理由</div><div style="font-size:12px;line-height:1.6">${html}</div></div>`;
+    })():''}
     ${t.notes?`<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">複盤筆記</div><div style="font-size:12px;line-height:1.6">${t.notes}</div></div>`:''}
     ${imgs.length?`<div style="margin-bottom:8px">
       <div style="font-size:10px;color:var(--text3);margin-bottom:6px">📸 進場截圖（${imgs.length} 張）</div>
@@ -2785,6 +2798,15 @@ function toggleTf(tf, btn){
   if(idx>-1){S.tfs.splice(idx,1);btn.classList.remove('on');}
   else{S.tfs.push(tf);btn.classList.add('on');}
 }
+function updateReasonTags(){
+  const val=document.getElementById('p1-reason')?.value||'';
+  const container=document.getElementById('p1-reason-tags');
+  if(!container)return;
+  const parts=val.split('、').map(s=>s.trim()).filter(Boolean);
+  container.innerHTML=parts.length
+    ? parts.map(p=>`<span class="reason-tag">${p.replace(/</g,'&lt;')}</span>`).join('')
+    : '';
+}
 function getTfValue(){
   // Returns comma-joined string for storage, or reads from chips
   return (S.tfs&&S.tfs.length)?S.tfs.join(','):'';
@@ -3147,7 +3169,8 @@ function rptShowDetail(idx){
 
   function toBullets(text){
     if(!text||!text.trim())return '<p style="font-size:13px;color:#c0c0c0;font-style:italic;padding:8px 0">尚無內容</p>';
-    const lines=text.split(/\n/).filter(l=>l.trim());
+    // 同時支援換行和頓號分隔
+    const lines=text.split(/\n|、/).map(l=>l.trim()).filter(Boolean);
     if(!lines.length)return '<p style="font-size:13px;color:#c0c0c0;font-style:italic;padding:8px 0">尚無內容</p>';
     return '<ul style="list-style:none;padding:0;margin:4px 0">'+lines.map(l=>`<li style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;font-size:14px;line-height:1.6;color:#374151"><span style="color:#f59e0b;font-size:11px;margin-top:4px;flex-shrink:0">◆</span><span>${esc(l)}</span></li>`).join('')+'</ul>';
   }
@@ -4270,7 +4293,7 @@ if(window._fbReady){
     const tag=(txt,c,b)=>`<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:${c};background:${b}">${txt}</span>`;
     const gc=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
     const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
-    function toBullets(text){if(!text||!text.trim())return'<p style="color:#c0c0c0;font-style:italic;font-size:13px;padding:8px 0">尚無內容</p>';const lines=text.split(/\n/).filter(l=>l.trim());return'<ul style="list-style:none;padding:0;margin:4px 0">'+lines.map(l=>`<li style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;font-size:14px;line-height:1.6;color:#374151"><span style="color:#f59e0b;font-size:11px;margin-top:4px;flex-shrink:0">◆</span><span>${esc(l)}</span></li>`).join('')+'</ul>';}
+    function toBullets(text){if(!text||!text.trim())return'<p style="color:#c0c0c0;font-style:italic;font-size:13px;padding:8px 0">尚無內容</p>';const lines=text.split(/\n|、/).map(l=>l.trim()).filter(Boolean);return'<ul style="list-style:none;padding:0;margin:4px 0">'+lines.map(l=>`<li style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;font-size:14px;line-height:1.6;color:#374151"><span style="color:#f59e0b;font-size:11px;margin-top:4px;flex-shrink:0">◆</span><span>${esc(l)}</span></li>`).join('')+'</ul>';}
     function photoGrid(imgs){if(!imgs||!imgs.length)return'<p style="color:#c0c0c0;font-style:italic;font-size:13px;padding:8px 0">尚無截圖</p>';return'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:8px">'+imgs.map(src=>`<div onclick="rvOpenLb('${src.replace(/'/g,"\\'")}');" style="aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;cursor:pointer;background:#f3f4f6"><img src="${esc(src)}" loading="lazy" style="width:100%;height:100%;object-fit:cover"></div>`).join('')+'</div>';}
     function prop(l,v){return`<tr><td style="color:#9ca3af;font-size:14px;padding:7px 0;width:40%;vertical-align:top">${l}</td><td style="color:#111;font-size:14px;padding:7px 0">${v}</td></tr>`;}
     function section(icon,title,body){return`<div style="margin-bottom:28px"><div style="font-size:16px;font-weight:700;color:#111;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">${icon} ${title}</div>${body}</div>`;}
