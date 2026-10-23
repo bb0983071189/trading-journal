@@ -3428,8 +3428,9 @@ async function importExitFromExchange(exchangeOverride){
           const closeTime=parseInt(p.closeTime||p.updateTime||0);
           return Math.abs(closeTime-fillTime)<300000; // within 5 min
         });
-        if(matchPos&&matchPos.realizedPnl!==undefined){
-          fill._realizedPnl=parseFloat(matchPos.realizedPnl); // 已實現盈虧（含開+平手續費）
+        const matchRpnl=matchPos?.realisedProfit??matchPos?.realizedPnl;
+        if(matchPos&&matchRpnl!==undefined){
+          fill._realizedPnl=parseFloat(matchRpnl); // 已實現盈虧（含開+平手續費）
         } else {
           // Fallback: fetch all orders to sum open commission
           fill._openCommission=undefined; // will fetch below
