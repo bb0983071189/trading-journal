@@ -908,6 +908,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       <div class="ss-card"><div class="ss-lbl">平均損益</div><div class="ss-val" id="sf-avg">—</div></div>
       <div class="ss-card"><div class="ss-lbl">最大虧損</div><div class="ss-val neg" id="sf-maxl">—</div></div>
       <div class="ss-card"><div class="ss-lbl">平均評分</div><div class="ss-val pu" id="sf-score">—</div></div>
+      <div class="ss-card"><div class="ss-lbl">平均風報比</div><div class="ss-val pu" id="sf-avgrr">—</div></div>
+      <div class="ss-card"><div class="ss-lbl">總風報比</div><div class="ss-val pu" id="sf-totalrr">—</div></div>
     </div>
     <div class="chart-wrap" style="margin-top:12px;margin-bottom:0"><div class="chart-title" id="sf-chart-title">策略篩選損益曲線</div><div class="chart-container"><canvas id="chart-sf-pnl"></canvas></div></div>
   </div>
@@ -1000,6 +1002,20 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         </select>
       </div>
       <div class="f"><label>損益 (USDT)</label><input type="number" id="e-pnl" placeholder="0.00" step="any"></div>
+    </div>
+    <div class="f" style="grid-column:1/-1;margin-bottom:9px">
+      <label>分析週期（可複選）</label>
+      <div id="e-tf-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+        <button type="button" class="tf-chip" data-etf="1m" onclick="toggleETf('1m',this)">1m</button>
+        <button type="button" class="tf-chip" data-etf="3m" onclick="toggleETf('3m',this)">3m</button>
+        <button type="button" class="tf-chip" data-etf="5m" onclick="toggleETf('5m',this)">5m</button>
+        <button type="button" class="tf-chip" data-etf="15m" onclick="toggleETf('15m',this)">15m</button>
+        <button type="button" class="tf-chip" data-etf="30m" onclick="toggleETf('30m',this)">30m</button>
+        <button type="button" class="tf-chip" data-etf="1h" onclick="toggleETf('1h',this)">1h</button>
+        <button type="button" class="tf-chip" data-etf="4h" onclick="toggleETf('4h',this)">4h</button>
+        <button type="button" class="tf-chip" data-etf="1D" onclick="toggleETf('1D',this)">1D</button>
+        <button type="button" class="tf-chip" data-etf="1W" onclick="toggleETf('1W',this)">1W</button>
+      </div>
     </div>
     <div class="f" style="margin-bottom:9px"><label>進場理由</label><input type="text" id="e-reason" placeholder="訊號、形態…"></div>
     <div class="f" style="margin-bottom:9px"><label>複盤筆記</label><textarea id="e-notes" style="min-height:56px;resize:vertical"></textarea></div>
@@ -1874,8 +1890,8 @@ function openEditModal(id){
   set('e-notes',t.notes);
   renderEditImgPreview('entry');
   renderEditImgPreview('exit');
-  // Load tf chips for edit modal (reuse main form chips)
-  setTfChips(t.tf||'');
+  // Load tf chips for edit modal
+  setETfChips(t.tf||'');
   closeModal();
   document.getElementById('edit-modal').classList.add('show');
 }
@@ -1915,7 +1931,7 @@ function saveEdit(){
     exitReason:xr,
     exitReasonLabel:xrMap[xr]||xr,
     netPnl:getN('e-pnl'),
-    tf:getTfValue(),
+    tf:getETfValue(),
     reason:get('e-reason'),
     notes:get('e-notes'),
     images:editImgEntry.slice(),
@@ -2410,8 +2426,8 @@ function renderStratFilter(baseList){
   buildStratFilterBody(baseList);
   const list=baseList.filter(t=>tradeMatchesSF(t)),n=list.length;
   if(!n){
-    ['sf-n','sf-wr','sf-pnl','sf-avg','sf-maxl','sf-score'].forEach(id=>sv(id,'—'));
-    ['sf-wr','sf-pnl','sf-avg'].forEach(id=>document.getElementById(id).className='ss-val');
+    ['sf-n','sf-wr','sf-pnl','sf-avg','sf-maxl','sf-score','sf-avgrr','sf-totalrr'].forEach(id=>sv(id,'—'));
+    ['sf-wr','sf-pnl','sf-avg','sf-avgrr','sf-totalrr'].forEach(id=>document.getElementById(id).className='ss-val');
     if(sfChart){sfChart.destroy();sfChart=null;}
     return;
   }
@@ -2420,12 +2436,24 @@ function renderStratFilter(baseList){
   const avg=total/n, maxL=Math.min(...list.map(t=>t.netPnl||0));
   const avgScore=list.reduce((a,t)=>a+(t.score||0),0)/n;
   const wr=Math.round(wins/n*100);
+  // 風報比計算
+  const rrList=list.map(t=>{
+    const ep=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(t.exit);
+    if(!ep||!sl||!ex||isNaN(ep)||isNaN(sl)||isNaN(ex))return null;
+    const risk=Math.abs(ep-sl);if(!risk)return null;
+    return Math.abs(ex-ep)/risk*((t.netPnl||0)<0?-1:1);
+  }).filter(v=>v!==null);
+  const avgRR=rrList.length?rrList.reduce((a,v)=>a+v,0)/rrList.length:null;
+  const totalRR=rrList.length?rrList.reduce((a,v)=>a+v,0):null;
+  const fmtRR=v=>v!==null?(v>=0?'+':'')+v.toFixed(2)+'R':'—';
   sv('sf-n',n);
   sv('sf-wr',wr+'%');document.getElementById('sf-wr').className='ss-val '+(wr>=50?'pos':'neg');
   sv('sf-pnl',(total>=0?'+':'')+total.toFixed(2)+' U');document.getElementById('sf-pnl').className='ss-val '+(total>=0?'pos':'neg');
   sv('sf-avg',(avg>=0?'+':'')+avg.toFixed(2)+' U');document.getElementById('sf-avg').className='ss-val '+(avg>=0?'pos':'neg');
   sv('sf-maxl',maxL.toFixed(2)+' U');
   sv('sf-score',avgScore.toFixed(1)+'/100');
+  sv('sf-avgrr',fmtRR(avgRR));document.getElementById('sf-avgrr').className='ss-val '+(avgRR===null?'pu':avgRR>=0?'pos':'neg');
+  sv('sf-totalrr',fmtRR(totalRR));document.getElementById('sf-totalrr').className='ss-val '+(totalRR===null?'pu':totalRR>=0?'pos':'neg');
   // Line chart colored by platform
   const sorted=[...list].sort((a,b)=>new Date(a.date)-new Date(b.date));
   let cum=0; const labels=[],data=[];
@@ -2800,6 +2828,20 @@ function toggleTf(tf, btn){
   if(idx>-1){S.tfs.splice(idx,1);btn.classList.remove('on');}
   else{S.tfs.push(tf);btn.classList.add('on');}
 }
+// Edit modal TF chips (independent from main form)
+let _editTfs=[];
+function toggleETf(tf,btn){
+  const idx=_editTfs.indexOf(tf);
+  if(idx>-1){_editTfs.splice(idx,1);btn.classList.remove('on');}
+  else{_editTfs.push(tf);btn.classList.add('on');}
+}
+function setETfChips(tfStr){
+  _editTfs=(tfStr||'').split(',').filter(Boolean);
+  document.querySelectorAll('#e-tf-chips .tf-chip').forEach(b=>{
+    b.classList.toggle('on',_editTfs.includes(b.dataset.etf));
+  });
+}
+function getETfValue(){return _editTfs.join(',');}
 function updateReasonTags(){
   const val=document.getElementById('p1-reason')?.value||'';
   const container=document.getElementById('p1-reason-tags');
@@ -3017,6 +3059,20 @@ function _exportNotionReportWithList(list){
   const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
   const wins=list.filter(t=>(t.netPnl||0)>0).length;
   const wr=list.length?Math.round(wins/list.length*100):0;
+  // 計算平均風報比
+  const rrVals=list.map(t=>{
+    const ep=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(t.exit);
+    if(!ep||!sl||!ex||isNaN(ep)||isNaN(sl)||isNaN(ex))return null;
+    const risk=Math.abs(ep-sl);if(!risk)return null;
+    const val=Math.abs(ex-ep)/risk*((t.netPnl||0)<0?-1:1);
+    return val;
+  }).filter(v=>v!==null);
+  const rrSum=rrVals.length?rrVals.reduce((s,v)=>s+v,0):null;
+  const avgRR=rrSum!==null?rrSum/rrVals.length:null;
+  const avgRRStr=avgRR!==null?(avgRR>=0?'+':'')+avgRR.toFixed(2)+'R':'—';
+  const avgRRColor=avgRR===null?'#9ca3af':avgRR>0?'#16a34a':'#dc2626';
+  const totalRRStr=rrSum!==null?(rrSum>=0?'+':'')+rrSum.toFixed(2)+'R':'—';
+  const totalRRColor=rrSum===null?'#9ca3af':rrSum>0?'#16a34a':'#dc2626';
 
   // Remove existing overlay if any
   const existing=document.getElementById('rpt-overlay');
@@ -3109,6 +3165,8 @@ function _exportNotionReportWithList(list){
         <div class="stat-card"><div class="stat-label">獲利</div><div class="stat-val" style="color:#16a34a">${wins} 筆</div></div>
         <div class="stat-card"><div class="stat-label">虧損</div><div class="stat-val" style="color:#dc2626">${list.length-wins} 筆</div></div>
         <div class="stat-card"><div class="stat-label">平均損益</div><div class="stat-val" style="color:${totalPnl/list.length>=0?'#16a34a':'#dc2626'}">${(totalPnl/list.length)>=0?'+':''}${(totalPnl/list.length).toFixed(2)} U</div></div>
+        <div class="stat-card"><div class="stat-label">平均風報比</div><div class="stat-val" style="color:${avgRRColor}">${avgRRStr}</div></div>
+        <div class="stat-card"><div class="stat-label">總風報比</div><div class="stat-val" style="color:${totalRRColor}">${totalRRStr}</div></div>
       </div>
       <!-- ── Table ── -->
       <div style="overflow-x:auto">
