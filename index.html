@@ -3083,11 +3083,13 @@ function _exportNotionReportWithList(list){
       #rpt-overlay .stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px 20px;min-width:90px;flex:1;box-shadow:0 1px 4px rgba(0,0,0,.06)}
       #rpt-overlay .stat-label{font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
       #rpt-overlay .stat-val{font-size:22px;font-weight:800;line-height:1.1}
-      #rpt-overlay thead th{position:sticky;top:var(--rpt-thead-top,180px);z-index:5}
+      #rpt-overlay thead th{position:sticky;top:0;z-index:5;background:#1e1b4b}
+      #rpt-overlay .rpt-sticky-top{position:sticky;top:0;z-index:10}
     </style>
     <div id="rpt-list-view">
+      <div class="rpt-sticky-top" id="rpt-top-block">
       <!-- ── Header bar ── -->
-      <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#4f46e5 100%);padding:18px 24px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:20">
+      <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#4f46e5 100%);padding:18px 24px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div>
           <div style="font-size:10px;font-weight:700;color:#a5b4fc;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px">Trading Journal Pro</div>
           <div style="font-size:20px;font-weight:800;color:#fff;line-height:1.2">📋 交易報表</div>
@@ -3110,6 +3112,7 @@ function _exportNotionReportWithList(list){
         <div class="stat-card"><div class="stat-label">虧損</div><div class="stat-val" style="color:#dc2626">${list.length-wins} 筆</div></div>
         <div class="stat-card"><div class="stat-label">平均損益</div><div class="stat-val" style="color:${totalPnl/list.length>=0?'#16a34a':'#dc2626'}">${(totalPnl/list.length)>=0?'+':''}${(totalPnl/list.length).toFixed(2)} U</div></div>
       </div>
+      </div><!-- /.rpt-sticky-top -->
       <!-- ── Table ── -->
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;min-width:960px">
@@ -3143,14 +3146,15 @@ function _exportNotionReportWithList(list){
 
   document.body.appendChild(overlay);
 
-  // Dynamically measure sticky header + stat cards height so thead sticks just below them
+  // Dynamically measure sticky top block height so thead sticks just below it
   requestAnimationFrame(()=>{
-    const hdr=overlay.querySelector('#rpt-list-view > div:first-child');
-    const stats=overlay.querySelector('#rpt-list-view > div:nth-child(2)');
-    if(hdr&&stats){
-      const top=hdr.offsetHeight+stats.offsetHeight;
-      overlay.style.setProperty('--rpt-thead-top', top+'px');
-    }
+    requestAnimationFrame(()=>{
+      const topBlock=overlay.querySelector('#rpt-top-block');
+      if(topBlock){
+        const h=topBlock.offsetHeight;
+        overlay.querySelectorAll('thead th').forEach(th=>th.style.top=h+'px');
+      }
+    });
   });
 
   // Store trades data on overlay for access
