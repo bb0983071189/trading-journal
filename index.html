@@ -65,6 +65,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 .nav-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
 .nav-count{background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;margin-left:4px}
 .page{display:none;padding:20px;max-width:920px;margin:0 auto}.page.on{display:block}
+.page-tagline{font-size:22px;font-weight:700;color:var(--text);letter-spacing:.01em;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.page-tagline span{color:var(--accent)}
 .card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .card-title{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:11px}
 .g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
@@ -432,6 +434,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 
 <!-- ENTRY PAGE -->
 <div class="page on" id="page-entry">
+  <div class="page-tagline">進步，<span>從紀錄開始</span></div>
 
   <!-- BingX + OKX 快速同步列 -->
   <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)">
@@ -496,35 +499,6 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       <button onclick="toggleApiSettings()" class="btn" style="font-size:12px">收起</button>
     </div>
     <div id="api-status" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
-  </div>
-
-  <div class="cap-card">
-    <div class="card-title">帳戶設定</div>
-    <div class="gauto">
-      <div class="f">
-        <label>總資金 (USDT)</label>
-        <input type="number" id="cap-total" placeholder="例如：5000" oninput="calcCapital()">
-        <span class="hint">目前交易所裡的總金額</span>
-      </div>
-      <div class="f">
-        <label>這筆風險 (Risk %)</label>
-        <div class="chips">
-          <button class="chip" onclick="selRisk(this,1)">1%</button>
-          <button class="chip" onclick="selRisk(this,2)">2%</button>
-          <button class="chip" onclick="selRisk(this,3)">3%</button>
-          <button class="chip" onclick="selRisk(this,5)">5%</button>
-          <button class="chip" onclick="selRisk(this,'c')">自訂</button>
-        </div>
-        <div id="risk-custom" style="display:none;margin-top:5px">
-          <input type="number" id="risk-val" placeholder="輸入 %" style="width:90px" oninput="calcCapital()">
-        </div>
-      </div>
-    </div>
-    <div class="cap-stats" id="cap-stats" style="display:none">
-      <div class="cap-s"><div class="cap-sl">最大可虧損</div><div class="cap-sv" id="cap-ml">—</div></div>
-      <div class="cap-s"><div class="cap-sl">建議保證金上限 (20x)</div><div class="cap-sv" id="cap-mg">—</div></div>
-      <div class="cap-s"><div class="cap-sl">風險等級</div><div class="cap-sv" id="cap-lv">—</div></div>
-    </div>
   </div>
 
   <div class="phase-bar">
@@ -842,6 +816,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 
 <!-- RECORDS PAGE -->
 <div class="page" id="page-records">
+  <div class="page-tagline">每筆交易，<span>都有跡可循</span></div>
   <div class="plat-tabs">
     <button class="plat-tab on" onclick="setRecPlat(this,'all')">全部平台</button>
     <button class="plat-tab" onclick="setRecPlat(this,'OKX')">OKX</button>
@@ -866,6 +841,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 
 <!-- REPORT PAGE -->
 <div class="page" id="page-report">
+  <div class="page-tagline">讓數據，<span>說出你的優勢</span></div>
   <div class="plat-tabs">
     <button class="plat-tab on" onclick="setRepPlat(this,'all')">全部平台</button>
     <button class="plat-tab" onclick="setRepPlat(this,'OKX')">OKX</button>
