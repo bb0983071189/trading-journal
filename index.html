@@ -934,6 +934,21 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     </div>
     <div id="wr-slot-list"></div>
   </div>
+
+  <!-- 4. By Emotion -->
+  <div class="wr-section">
+    <div class="wr-title"><span>🧠 開單情緒勝率分析</span></div>
+    <div class="wr-header-row">
+      <span>情緒狀態</span><span class="wr-h-bar">勝率</span><span class="wr-h-pct">勝率%</span><span class="wr-h-pnl">損益</span><span class="wr-h-n">筆數</span>
+    </div>
+    <div id="wr-emo-list"></div>
+  </div>
+
+  <!-- 5. Long vs Short -->
+  <div class="wr-section">
+    <div class="wr-title"><span>📈 做多 vs 做空分析</span></div>
+    <div id="wr-dir-summary"></div>
+  </div>
 </div>
 
 <!-- CALENDAR PAGE -->
@@ -2858,7 +2873,7 @@ function wrRow(label, n, wins, totalPnl){
 function renderWinRateAnalysis(list){
   const closed=list.filter(t=>t.status!=='open'&&t.netPnl!==undefined);
   if(!closed.length){
-    ['wr-sym-list','wr-dow-list','wr-slot-list'].forEach(id=>{
+    ['wr-sym-list','wr-dow-list','wr-slot-list','wr-emo-list'].forEach(id=>{
       const el=document.getElementById(id);
       if(el)el.innerHTML='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">尚無已出場的交易資料</div>';
     });
@@ -2918,6 +2933,106 @@ function renderWinRateAnalysis(list){
   });
   const slotEl=document.getElementById('wr-slot-list');
   if(slotEl) slotEl.innerHTML=SLOTS.map(s=>wrRow(s.label,slotMap[s.label].n,slotMap[s.label].wins,parseFloat(slotMap[s.label].pnl.toFixed(2)))).filter(Boolean).join('');
+
+  // ── 4. By Emotion ──
+  const EMO_DEFS=[
+    {key:'冷靜自信', icon:'😌', label:'冷靜清晰'},
+    {key:'略為興奮', icon:'😊', label:'有點興奮'},
+    {key:'FOMO 衝動',icon:'😰', label:'FOMO 衝動'},
+    {key:'焦慮不安', icon:'😟', label:'焦慮不安'},
+    {key:'報復交易', icon:'😤', label:'報復交易'},
+    {key:'疲憊',     icon:'😴', label:'疲憊'},
+  ];
+  const emoMap={};
+  EMO_DEFS.forEach(e=>emoMap[e.key]={n:0,wins:0,pnl:0});
+  closed.forEach(t=>{
+    const em=t.emotion||'';
+    if(!em||!emoMap[em])return;
+    emoMap[em].n++;
+    emoMap[em].pnl+=t.netPnl||0;
+    if((t.netPnl||0)>0)emoMap[em].wins++;
+  });
+  const emoEl=document.getElementById('wr-emo-list');
+  if(emoEl){
+    const rows=EMO_DEFS.map(e=>{
+      const d=emoMap[e.key];
+      if(!d.n)return'';
+      return wrRow(`${e.icon} ${e.label}`,d.n,d.wins,parseFloat(d.pnl.toFixed(2)));
+    }).filter(Boolean).join('');
+    emoEl.innerHTML=rows||'<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">尚無情緒紀錄</div>';
+  }
+
+  // ── 5. Long vs Short ──
+  const dirEl=document.getElementById('wr-dir-summary');
+  if(dirEl){
+    const dirs=['做多','做空'];
+    const dirIcons={'做多':'🟢','做空':'🔴'};
+    const dm={};
+    dirs.forEach(d=>dm[d]={n:0,wins:0,pnl:0,avgPnl:0,avgWin:0,avgLoss:0,winPnls:[],lossPnls:[]});
+    closed.forEach(t=>{
+      const d=t.dir;
+      if(!d||!dm[d])return;
+      dm[d].n++;
+      dm[d].pnl+=t.netPnl||0;
+      if((t.netPnl||0)>0){dm[d].wins++;dm[d].winPnls.push(t.netPnl);}
+      else{dm[d].lossPnls.push(t.netPnl||0);}
+    });
+    const totalN=closed.length;
+    let html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+    dirs.forEach(d=>{
+      const s=dm[d];
+      if(!s.n){html+=`<div style="background:var(--bg3);border-radius:var(--rs);padding:14px;text-align:center;color:var(--text3);font-size:12px">${dirIcons[d]} ${d}<br>無紀錄</div>`;return;}
+      const wr=Math.round(s.wins/s.n*100);
+      const pnl=parseFloat(s.pnl.toFixed(2));
+      const avgWin=s.winPnls.length?parseFloat((s.winPnls.reduce((a,b)=>a+b,0)/s.winPnls.length).toFixed(2)):0;
+      const avgLoss=s.lossPnls.length?parseFloat((s.lossPnls.reduce((a,b)=>a+b,0)/s.lossPnls.length).toFixed(2)):0;
+      const rr=avgLoss!==0?parseFloat(Math.abs(avgWin/avgLoss).toFixed(2)):null;
+      const pct=totalN?Math.round(s.n/totalN*100):0;
+      const wrColor=wr>=60?'var(--green)':wr>=50?'#84cc16':wr>=40?'var(--amber)':'var(--red)';
+      const pnlColor=pnl>=0?'var(--green)':'var(--red)';
+      const borderColor=d==='做多'?'var(--green)':'var(--red)';
+      html+=`<div style="background:var(--bg3);border-radius:var(--rs);padding:14px;border-left:3px solid ${borderColor}">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">${dirIcons[d]} ${d} <span style="font-size:11px;color:var(--text3);font-weight:400">(${s.n}筆 · 佔${pct}%)</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+          <div style="background:var(--bg);border-radius:5px;padding:7px;text-align:center">
+            <div style="color:var(--text3);margin-bottom:2px">勝率</div>
+            <div style="font-size:16px;font-weight:700;color:${wrColor}">${wr}%</div>
+          </div>
+          <div style="background:var(--bg);border-radius:5px;padding:7px;text-align:center">
+            <div style="color:var(--text3);margin-bottom:2px">總損益</div>
+            <div style="font-size:14px;font-weight:700;color:${pnlColor}">${pnl>=0?'+':''}${pnl} U</div>
+          </div>
+          <div style="background:var(--bg);border-radius:5px;padding:7px;text-align:center">
+            <div style="color:var(--text3);margin-bottom:2px">平均獲利</div>
+            <div style="font-size:13px;font-weight:600;color:var(--green)">${avgWin>0?'+':''}${avgWin} U</div>
+          </div>
+          <div style="background:var(--bg);border-radius:5px;padding:7px;text-align:center">
+            <div style="color:var(--text3);margin-bottom:2px">平均虧損</div>
+            <div style="font-size:13px;font-weight:600;color:var(--red)">${avgLoss} U</div>
+          </div>
+          <div style="background:var(--bg);border-radius:5px;padding:7px;text-align:center;grid-column:1/-1">
+            <div style="color:var(--text3);margin-bottom:2px">盈虧比 (平均獲利/平均虧損)</div>
+            <div style="font-size:14px;font-weight:700;color:${rr===null?'var(--text3)':rr>=1?'var(--green)':'var(--red)'}">${rr===null?'—':rr+'R'}</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;background:var(--bg4);border-radius:4px;overflow:hidden;height:6px">
+          <div style="height:6px;background:${wrColor};width:${wr}%;border-radius:4px;transition:width .3s"></div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+    // Comparison note
+    const l=dm['做多'],s2=dm['做空'];
+    if(l.n&&s2.n){
+      const lWr=Math.round(l.wins/l.n*100),sWr=Math.round(s2.wins/s2.n*100);
+      const better=lWr>sWr?'做多':'做空';
+      const betterWr=Math.max(lWr,sWr),worseWr=Math.min(lWr,sWr);
+      html+=`<div style="margin-top:10px;padding:9px 12px;background:var(--accent-bg);border-radius:var(--rs);font-size:11px;color:var(--text2)">
+        💡 <b style="color:var(--text)">${better}</b> 勝率較高（${betterWr}% vs ${worseWr}%），差距 ${betterWr-worseWr} 個百分點
+      </div>`;
+    }
+    dirEl.innerHTML=html;
+  }
 }
 function exportCSV(){
   const list=filterT(trades,recF);
