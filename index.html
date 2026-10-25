@@ -1003,6 +1003,12 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       </div>
       <div class="f"><label>損益 (USDT)</label><input type="number" id="e-pnl" placeholder="0.00" step="any"></div>
     </div>
+    <!-- 策略選擇 -->
+    <div style="grid-column:1/-1;margin-bottom:9px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">策略（可複選）</div>
+      <div id="e-strat-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px"></div>
+      <div id="e-strat-selected" style="font-size:11px;color:var(--accent);margin-top:5px">尚未選擇策略</div>
+    </div>
     <div class="f" style="grid-column:1/-1;margin-bottom:9px">
       <label>分析週期（可複選）</label>
       <div id="e-tf-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
@@ -1890,6 +1896,8 @@ function openEditModal(id){
   set('e-notes',t.notes);
   renderEditImgPreview('entry');
   renderEditImgPreview('exit');
+  // Load strat chips for edit modal
+  setEStratChips(Array.isArray(t.strats)?t.strats:(t.strat?[t.strat]:[]), t.exchange||'OKX');
   // Load tf chips for edit modal
   setETfChips(t.tf||'');
   closeModal();
@@ -1899,7 +1907,31 @@ function updateEditAccountOptions(){
   const ex=document.getElementById('e-exchange')?.value;
   const field=document.getElementById('e-account-field');
   if(field)field.style.display=ex==='BingX'?'flex':'none';
+  updateEditStratGrid(ex);
 }
+let _editStrats=[];
+function updateEditStratGrid(ex){
+  const defs=STRAT_DEFS[ex]||STRAT_DEFS.OKX;
+  const grid=document.getElementById('e-strat-grid');
+  if(!grid)return;
+  grid.innerHTML=defs.map(d=>
+    `<button type="button" class="strat-btn${_editStrats.includes(d.key)?' on':''}" onclick="toggleEStrat(this,'${d.key}')"><span class="s1">${d.key}</span><span class="s2">${d.s2}</span></button>`
+  ).join('');
+  const sel=document.getElementById('e-strat-selected');
+  if(sel)sel.textContent=_editStrats.length?'已選：'+_editStrats.join('、'):'尚未選擇策略';
+}
+function toggleEStrat(btn,val){
+  btn.classList.toggle('on');
+  if(btn.classList.contains('on')){if(!_editStrats.includes(val))_editStrats.push(val);}
+  else{_editStrats=_editStrats.filter(s=>s!==val);}
+  const sel=document.getElementById('e-strat-selected');
+  if(sel)sel.textContent=_editStrats.length?'已選：'+_editStrats.join('、'):'尚未選擇策略';
+}
+function setEStratChips(stratsArr,ex){
+  _editStrats=(stratsArr||[]).slice();
+  updateEditStratGrid(ex);
+}
+function getEStratValue(){return _editStrats.slice();}
 
 function closeEditModal(){
   document.getElementById('edit-modal').classList.remove('show');
@@ -1931,6 +1963,8 @@ function saveEdit(){
     exitReason:xr,
     exitReasonLabel:xrMap[xr]||xr,
     netPnl:getN('e-pnl'),
+    strats:getEStratValue(),
+    strat:getEStratValue()[0]||'',
     tf:getETfValue(),
     reason:get('e-reason'),
     notes:get('e-notes'),
@@ -3516,11 +3550,37 @@ async function importExitFromExchange(exchangeOverride){
       if(!fills.length){
         const data=await reqFn2('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
         const orders=data?.data?.orders||[];
-        fills=orders.filter(o=>
+        const rawFills=orders.filter(o=>
           o.status==='FILLED'&&
           (o.reduceOnly===true||o.reduceOnly==='true')&&
           o.profit!==''&&o.profit!==undefined
         ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
+        // 合併分批出場：同 positionSide 全部加總為一筆（不限時間）
+        if(rawFills.length>1){
+          const side=rawFills[0].positionSide||rawFills[0].side;
+          const batch=rawFills.filter(o=>(o.positionSide||o.side)===side);
+          if(batch.length>1){
+            const totalQty=batch.reduce((s,o)=>s+parseFloat(o.executedQty||o.quantity||1),0);
+            const wAvgPrice=batch.reduce((s,o)=>s+parseFloat(o.avgPrice||o.price||0)*parseFloat(o.executedQty||o.quantity||1),0)/totalQty;
+            const totalProfit=batch.reduce((s,o)=>s+parseFloat(o.profit||0),0);
+            const totalComm=batch.reduce((s,o)=>s+Math.abs(parseFloat(o.commission||o.fee||0)),0);
+            fills=[{
+              avgPrice: wAvgPrice,
+              profit: totalProfit,
+              commission: totalComm,
+              updateTime: parseInt(rawFills[0].updateTime||Date.now()),
+              type: rawFills[0].type||'manual',
+              positionSide: side,
+              _fromBingX2: exchange==='BingX2',
+              _merged: true,
+              _mergedCount: batch.length
+            }];
+          } else {
+            fills=rawFills;
+          }
+        } else {
+          fills=rawFills;
+        }
         if(exchange==='BingX2') fills.forEach(o=>o._fromBingX2=true);
       }
       if(exchange==='BingX2'&&!fills[0]?._fromPosHistory) fills.forEach(o=>o._fromBingX2=true);
