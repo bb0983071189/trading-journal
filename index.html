@@ -422,7 +422,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   <button class="nav-tab on" onclick="showPage('entry')">記錄交易</button>
   <button class="nav-tab" onclick="showPage('records')">紀錄 <span class="nav-count" id="nav-count">0</span></button>
   <button class="nav-tab" onclick="showPage('report')">報表</button>
-  <button class="nav-tab" onclick="showPage('calendar')">日曆</button>
+  <button class="nav-tab" onclick="showPage('calendar')">盈虧日曆</button>
   <div class="sync-bar offline" id="sync-bar">
     <span class="sync-dot" id="sync-dot"></span>
     <span id="sync-txt">載入中…</span>
@@ -878,36 +878,9 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <button class="fc" onclick="setRF(this,'30d')">近 30 天</button>
   </div>
 
-  <!-- Top row: stats + calendar side by side -->
-  <div class="rep-top-row">
-    <!-- Left: stats + PnL curve -->
-    <div class="rep-left">
-      <div class="stat-grid" id="stat-grid"></div>
-      <div class="chart-wrap"><div class="chart-title">損益曲線（累積）</div><div class="chart-container"><canvas id="chart-pnl"></canvas></div></div>
-    </div>
-    <!-- Right: PnL Calendar -->
-    <div class="rep-right">
-      <div class="pnl-cal-card">
-        <div class="pnl-cal-header">
-          <div class="pnl-cal-title">盈虧日曆</div>
-          <div class="pnl-cal-nav">
-            <button class="pnl-cal-nav-btn" onclick="calNav(-1)">‹</button>
-            <span class="pnl-cal-month" id="cal-month-label"></span>
-            <button class="pnl-cal-nav-btn" onclick="calNav(1)">›</button>
-          </div>
-        </div>
-        <!-- Platform legend (only shown in all mode) -->
-        <div class="pnl-cal-legend" id="cal-legend">
-          <span><span class="leg-dot" style="background:#2563eb"></span>OKX</span>
-          <span><span class="leg-dot" style="background:#059669"></span>BingX</span>
-          <span><span class="leg-dot" style="background:#d97706"></span>BingX (OP)</span>
-        </div>
-        <div class="pnl-cal-grid" id="pnl-cal-grid"></div>
-        <!-- Monthly summary -->
-        <div class="pnl-cal-summary" id="cal-summary"></div>
-      </div>
-    </div>
-  </div>
+  <!-- Stats + PnL curve -->
+  <div class="stat-grid" id="stat-grid"></div>
+  <div class="chart-wrap"><div class="chart-title">損益曲線（累積）</div><div class="chart-container"><canvas id="chart-pnl"></canvas></div></div>
 
   <div class="strat-filter-section">
     <div class="strat-filter-title">策略統計篩選</div>
@@ -2850,9 +2823,6 @@ function renderRep(){
   Object.keys(sfActivePlatStrat).forEach(p=>sfActivePlatStrat[p]=new Set(['all']));
   sfSelected=new Set(['all']);
   renderStratFilter(list);
-
-  // Render calendar
-  renderCalendar(list);
 
   // Render win rate analysis
   renderWinRateAnalysis(list);
