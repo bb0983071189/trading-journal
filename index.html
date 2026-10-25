@@ -3532,6 +3532,29 @@ async function importExitFromExchange(exchangeOverride){
       const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=20&state=filled');
       fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
         .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
+      // 合併分批出場：同 posSide 的所有平倉單全部加總為一筆（不限時間）
+      if(fills.length>1){
+        const newestSide=fills[0].posSide;
+        const batch=fills.filter(o=>o.posSide===newestSide);
+        if(batch.length>1){
+          // 加權平均出場價（以 sz 成交量為權重，若無 sz 則等權）
+          const totalSz=batch.reduce((s,o)=>s+parseFloat(o.sz||1),0);
+          const wAvgPx=batch.reduce((s,o)=>s+parseFloat(o.avgPx||0)*parseFloat(o.sz||1),0)/totalSz;
+          const totalPnl=batch.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
+          const totalFee=batch.reduce((s,o)=>s+parseFloat(o.fee||0),0);
+          const merged={
+            avgPx: wAvgPx,
+            pnl: totalPnl,
+            fee: totalFee,
+            uTime: fills[0].uTime,
+            cTime: fills[0].cTime,
+            posSide: newestSide,
+            _merged: true,
+            _mergedCount: batch.length
+          };
+          fills=[merged];
+        }
+      }
     }
 
     if(!fills.length){
@@ -3562,7 +3585,8 @@ async function importExitFromExchange(exchangeOverride){
       setExImportStatus('沒有找到出場記錄，請手動填寫','var(--amber)');
     } else if(exType==='BingX'&&fills[0]._fromPosHistory){
       applyExitFill(fills[0],exType);
-    } else if(fills.length===1){
+    } else if(fills.length===1||(exchange==='OKX'&&fills[0]?._merged)){
+      // OKX 合併後直接帶入，不彈選擇器
       applyExitFill(fills[0],exType);
     } else {
       showExitFillSelector(fills,exType);
