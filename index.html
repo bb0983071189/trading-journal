@@ -1159,6 +1159,22 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 const WORKER_URL = localStorage.getItem('worker_url') || 'https://trading-api-proxy.bb0983071189.workers.dev';
 window._workerUrl = WORKER_URL;
 
+// ===== 價格格式化 =====
+// ≥1：最多2位小數；0.開頭：最多6位有效小數
+function fmtP(v){
+  const n=parseFloat(v);
+  if(!v&&v!==0)return'—';
+  if(isNaN(n))return String(v);
+  if(n===0)return'0';
+  if(Math.abs(n)>=1){
+    // 2位小數，去掉尾零
+    return parseFloat(n.toFixed(2)).toString();
+  } else {
+    // 0.開頭：最多6位小數，去掉尾零
+    return parseFloat(n.toFixed(6)).toString();
+  }
+}
+
 // ===== FTMO FEE RULES =====
 // Based on FTMO commission structure (per lot, round-trip)
 // Forex pairs: $3/lot round-trip (approx $1.5/lot per side × 100,000 notional)
@@ -2335,8 +2351,8 @@ function renderRec(){
         <div class="rs"><span class="rl">損益</span><span class="rv ${isOpen?'':''}${!isOpen&&t.netPnl>=0?'pos':!isOpen?'neg':''}">${isOpen?'持倉中':(t.netPnl>=0?'+':'')+((t.netPnl||0).toFixed(2))+' U'}</span></div>
         <div class="rs"><span class="rl">出場原因</span><span class="rv">${isOpen?'—':exitLbl}</span></div>
         <div class="rs"><span class="rl">保證金/手數</span><span class="rv">${t.margin||'—'}</span></div>
-        <div class="rs"><span class="rl">進場價</span><span class="rv">${t.entry||'—'}</span></div>
-        <div class="rs"><span class="rl">出場價</span><span class="rv">${isOpen?'—':t.exit||'—'}</span></div>
+        <div class="rs"><span class="rl">進場價</span><span class="rv">${fmtP(t.entry)}</span></div>
+        <div class="rs"><span class="rl">出場價</span><span class="rv">${isOpen?'—':fmtP(t.exit)}</span></div>
         <div class="rs"><span class="rl">策略</span><span class="rv">${stratLabel}</span></div>
         <div class="rs"><span class="rl">情緒</span><span class="rv">${t.emotion||'—'}</span></div>
         <div class="rs"><span class="rl">評分</span><span class="rv">${isOpen?'出場後評分':t.score!=null?t.score+'/100':'—'}</span></div>
@@ -2357,8 +2373,8 @@ function showDetail(id){
     <div class="g2" style="gap:7px;margin-bottom:10px">
       <div><div style="font-size:10px;color:var(--text3)">平台</div><div style="font-size:13px;font-weight:500">${exLabel}</div></div>
       <div><div style="font-size:10px;color:var(--text3)">方向</div><div style="font-size:13px;font-weight:600;color:${t.dir==='做多'?'var(--green)':'var(--red)'}">${t.dir}</div></div>
-      <div><div style="font-size:10px;color:var(--text3)">進場價</div><div style="font-size:13px">${t.entry}</div></div>
-      <div><div style="font-size:10px;color:var(--text3)">出場價</div><div style="font-size:13px">${t.exit}</div></div>
+      <div><div style="font-size:10px;color:var(--text3)">進場價</div><div style="font-size:13px">${fmtP(t.entry)}</div></div>
+      <div><div style="font-size:10px;color:var(--text3)">出場價</div><div style="font-size:13px">${fmtP(t.exit)}</div></div>
       <div><div style="font-size:10px;color:var(--text3)">保證金/手數</div><div style="font-size:13px">${t.margin}</div></div>
       <div><div style="font-size:10px;color:var(--text3)">出場原因</div><div style="font-size:13px;font-weight:500">${exitLbl}</div></div>
       <div><div style="font-size:10px;color:var(--text3)">損益</div><div style="font-size:15px;font-weight:700;color:${t.netPnl>=0?'var(--green)':'var(--red)'}">${t.netPnl>=0?'+':''}${(t.netPnl||0).toFixed(2)} U</div></div>
@@ -3131,12 +3147,12 @@ function _exportNotionReportWithList(list){
       </td>
       <td style="padding:11px 12px;text-align:center">${tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151">${t.lev?t.lev+'x':'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.entry||''}">${t.entry||'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.exit||''}">${t.exit||'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#ef4444;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.sl||''}">${t.sl||'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tp1||''}">${t.tp1||'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tp2||''}">${t.tp2||'—'}</td>
-      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tp3||''}">${t.tp3||'—'}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.entry||''}">${fmtP(t.entry)}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.exit||''}">${fmtP(t.exit)}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#ef4444;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.sl||''}">${fmtP(t.sl)}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tp1||''}">${fmtP(t.tp1)}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tp2||''}">${fmtP(t.tp2)}</td>
+      <td style="padding:11px 12px;font-size:13px;text-align:center;color:#22c55e;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tp3||''}">${fmtP(t.tp3)}</td>
       <td style="padding:11px 12px;text-align:center">${tag(xrLabelMap(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${strats}">${strats}</td>
       <td style="padding:11px 12px;font-size:13px;text-align:center;color:#374151">${t.tf||'—'}</td>
@@ -3324,10 +3340,10 @@ function rptShowDetail(idx){
       </div>
       <!-- price grid -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:1px;background:#e5e7eb;border-bottom:1px solid #e5e7eb">
-        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">進場價</div><div style="font-size:15px;font-weight:700;color:#374151">${t.entry||'—'}</div></div>
-        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">出場價</div><div style="font-size:15px;font-weight:700;color:#374151">${t.exit||'—'}</div></div>
-        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#ef4444;font-weight:600;text-transform:uppercase;margin-bottom:4px">止損</div><div style="font-size:15px;font-weight:700;color:#ef4444">${t.sl||'—'}</div></div>
-        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;margin-bottom:4px">TP</div><div style="font-size:14px;font-weight:700;color:#22c55e">${[t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—'}</div></div>
+        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">進場價</div><div style="font-size:15px;font-weight:700;color:#374151">${fmtP(t.entry)}</div></div>
+        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">出場價</div><div style="font-size:15px;font-weight:700;color:#374151">${fmtP(t.exit)}</div></div>
+        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#ef4444;font-weight:600;text-transform:uppercase;margin-bottom:4px">止損</div><div style="font-size:15px;font-weight:700;color:#ef4444">${fmtP(t.sl)}</div></div>
+        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;margin-bottom:4px">TP</div><div style="font-size:14px;font-weight:700;color:#22c55e">${[t.tp1,t.tp2,t.tp3].filter(Boolean).map(fmtP).join(' / ')||'—'}</div></div>
         <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">風報比</div><div style="font-size:15px;font-weight:700;color:${(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'#9ca3af';return p>=0?'#16a34a':'#ef4444';})()}">${(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'—';const rv=parseFloat((p/50).toFixed(2));return(rv>=0?'+':'')+rv.toFixed(2)+'R';})()}</div></div>
         <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">情緒</div><div style="font-size:13px;font-weight:600;color:#374151">${esc(t.emotion||'—')}</div></div>
       </div>
@@ -4404,12 +4420,12 @@ if(window._fbReady){
         <td style="padding:10px 12px;font-size:13px;color:#6b7280">${esc(t.date||'—')}</td>
         <td style="padding:10px 12px;text-align:center">${tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir))}</td>
         <td style="padding:10px 12px;font-size:13px;text-align:center">${t.lev?t.lev+'x':'—'}</td>
-        <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(t.entry||'—')}</td>
-        <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(t.exit||'—')}</td>
-        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#ef4444">${esc(t.sl||'—')}</td>
-        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${esc(t.tp1||'—')}</td>
-        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${esc(t.tp2||'—')}</td>
-        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${esc(t.tp3||'—')}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${fmtP(t.entry)}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center">${fmtP(t.exit)}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#ef4444">${fmtP(t.sl)}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${fmtP(t.tp1)}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${fmtP(t.tp2)}</td>
+        <td style="padding:10px 12px;font-size:13px;text-align:center;color:#22c55e">${fmtP(t.tp3)}</td>
         <td style="padding:10px 12px;text-align:center">${tag(xrLbl(t.exitReason),xrColor(t.exitReason),xrBg(t.exitReason))}</td>
         <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(strats)}</td>
         <td style="padding:10px 12px;font-size:13px;text-align:center">${esc(t.tf||'—')}</td>
@@ -4506,9 +4522,9 @@ if(window._fbReady){
           ${prop('方向',tag(t.dir||'—',dirColor(t.dir),dirBg(t.dir)))}
           ${prop('出場原因',tag(xrL(t.exitReason),xrC(t.exitReason),xrB(t.exitReason)))}
           ${prop('進場/出場',esc((t.etime||'—')+' → '+(t.xtime||'—')))}
-          ${prop('進場價 / 出場價',esc((t.entry||'—')+' / '+(t.exit||'—')))}
-          ${prop('止損','<span style="color:#ef4444">'+esc(t.sl||'—')+'</span>')}
-          ${prop('TP1/TP2/TP3','<span style="color:#22c55e">'+esc([t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—')+'</span>')}
+          ${prop('進場價 / 出場價',esc(fmtP(t.entry)+' / '+fmtP(t.exit)))}
+          ${prop('止損','<span style="color:#ef4444">'+fmtP(t.sl)+'</span>')}
+          ${prop('TP1/TP2/TP3','<span style="color:#22c55e">'+([t.tp1,t.tp2,t.tp3].filter(Boolean).map(fmtP).join(' / ')||'—')+'</span>')}
           ${prop('槓桿',t.lev?esc(t.lev)+'x':'—')}
           ${prop('策略',esc(strats))}
           ${prop('週期',esc(t.tf||'—'))}
