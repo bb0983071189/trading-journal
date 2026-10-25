@@ -65,8 +65,18 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 .nav-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
 .nav-count{background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;margin-left:4px}
 .page{display:none;padding:20px;max-width:920px;margin:0 auto}.page.on{display:block}
-.page-tagline{font-size:22px;font-weight:700;color:var(--text);letter-spacing:.01em;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.page-tagline{font-size:22px;font-weight:700;color:var(--text);letter-spacing:.01em;margin-bottom:4px}
 .page-tagline span{color:var(--accent)}
+.page-tagline-en{font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+/* Calendar modal */
+.cal-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.cal-modal-overlay.open{opacity:1;pointer-events:all}
+.cal-modal-box{background:var(--bg);border-radius:var(--r);padding:20px;width:min(540px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);transform:translateY(12px);transition:transform .2s}
+.cal-modal-overlay.open .cal-modal-box{transform:translateY(0)}
+.cal-modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cal-modal-title{font-size:15px;font-weight:700;color:var(--text)}
+.cal-modal-close{width:30px;height:30px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;line-height:1;transition:all .15s}
+.cal-modal-close:hover{border-color:var(--accent);color:var(--accent)}
 .card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .card-title{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:11px}
 .g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
@@ -424,17 +434,18 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   <button class="nav-tab on" onclick="showPage('entry')">記錄交易</button>
   <button class="nav-tab" onclick="showPage('records')">紀錄 <span class="nav-count" id="nav-count">0</span></button>
   <button class="nav-tab" onclick="showPage('report')">報表</button>
-  <button class="nav-tab" onclick="showPage('calendar')">盈虧日曆</button>
   <div class="sync-bar offline" id="sync-bar">
     <span class="sync-dot" id="sync-dot"></span>
     <span id="sync-txt">載入中…</span>
   </div>
-  <button id="theme-toggle" onclick="toggleTheme()" title="切換日間／夜間模式" style="margin-left:auto;width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;line-height:1">☀️</button>
+  <button id="cal-modal-btn" onclick="openCalModal()" title="盈虧日曆" style="margin-left:auto;width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;line-height:1">📅</button>
+  <button id="theme-toggle" onclick="toggleTheme()" title="切換日間／夜間模式" style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;line-height:1;margin-left:6px">☀️</button>
 </nav>
 
 <!-- ENTRY PAGE -->
 <div class="page on" id="page-entry">
   <div class="page-tagline">進步，<span>從紀錄開始</span></div>
+  <div class="page-tagline-en">Progress starts with records</div>
 
   <!-- BingX + OKX 快速同步列 -->
   <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)">
@@ -448,12 +459,9 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <button class="btn" onclick="syncExchange('BingX')" id="sync-bingx-btn" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
       ⚡ BingX
     </button>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-      <div style="font-size:9px;color:var(--text3);font-weight:600;letter-spacing:.05em">OP</div>
-      <button class="btn" onclick="syncExchange('BingX2')" id="sync-bingx2-btn" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
-        ⚡ BingX
-      </button>
-    </div>
+    <button class="btn" onclick="syncExchange('BingX2')" id="sync-bingx2-btn" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
+      ⚡ BingX ⚡
+    </button>
     <button class="btn" onclick="syncExchange('OKX')" id="sync-okx-btn" style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd">
       ⚡ OKX
     </button>
@@ -817,6 +825,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 <!-- RECORDS PAGE -->
 <div class="page" id="page-records">
   <div class="page-tagline">每筆交易，<span>都有跡可循</span></div>
+  <div class="page-tagline-en">Every trade leaves a trace</div>
   <div class="plat-tabs">
     <button class="plat-tab on" onclick="setRecPlat(this,'all')">全部平台</button>
     <button class="plat-tab" onclick="setRecPlat(this,'OKX')">OKX</button>
@@ -842,6 +851,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 <!-- REPORT PAGE -->
 <div class="page" id="page-report">
   <div class="page-tagline">讓數據，<span>說出你的優勢</span></div>
+  <div class="page-tagline-en">Let the data reveal your edge</div>
   <div class="plat-tabs">
     <button class="plat-tab on" onclick="setRepPlat(this,'all')">全部平台</button>
     <button class="plat-tab" onclick="setRepPlat(this,'OKX')">OKX</button>
@@ -927,9 +937,13 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   </div>
 </div>
 
-<!-- CALENDAR PAGE -->
-<div class="page" id="page-calendar">
-  <div style="max-width:520px;margin:0 auto">
+<!-- CALENDAR MODAL -->
+<div class="cal-modal-overlay" id="cal-modal-overlay" onclick="handleCalOverlayClick(event)">
+  <div class="cal-modal-box">
+    <div class="cal-modal-header">
+      <span class="cal-modal-title">盈虧日曆</span>
+      <button class="cal-modal-close" onclick="closeCalModal()">×</button>
+    </div>
     <!-- Platform filter -->
     <div class="plat-tabs" style="margin-bottom:14px">
       <button class="plat-tab on" onclick="setCalPlat(this,'all')">全部</button>
@@ -937,9 +951,9 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       <button class="plat-tab" onclick="setCalPlat(this,'BingX')">BingX</button>
       <button class="plat-tab" onclick="setCalPlat(this,'BingX2')">BingX (OP)</button>
     </div>
-    <div class="pnl-cal-card">
+    <div class="pnl-cal-card" style="margin-bottom:0">
       <div class="pnl-cal-header">
-        <div class="pnl-cal-title">盈虧日曆</div>
+        <div class="pnl-cal-title" style="font-size:13px;color:var(--text2)">月份</div>
         <div class="pnl-cal-nav">
           <button class="pnl-cal-nav-btn" onclick="calPageNav(-1)">‹</button>
           <span class="pnl-cal-month" id="cal-page-month-label"></span>
@@ -1368,10 +1382,9 @@ function toggleTheme(){
 function showPage(p){
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.getElementById('page-'+p).classList.add('on');
-  document.querySelectorAll('.nav-tab').forEach((t,i)=>t.classList.toggle('on',['entry','records','report','calendar'][i]===p));
+  document.querySelectorAll('.nav-tab').forEach((t,i)=>t.classList.toggle('on',['entry','records','report'][i]===p));
   if(p==='records')renderRec();
   if(p==='report')renderRep();
-  if(p==='calendar')renderCalPage();
 }
 function goPhase(n){[1,2,3].forEach(i=>{document.getElementById('ph'+i).style.display=i===n?'block':'none';document.getElementById('pb'+i).classList.toggle('on',i===n);});}
 
@@ -2697,9 +2710,22 @@ function renderCalendar(list){
     isAllPlat
   );
 }
+function openCalModal(){
+  const overlay=document.getElementById('cal-modal-overlay');
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+  renderCalPage();
+}
+function closeCalModal(){
+  document.getElementById('cal-modal-overlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+function handleCalOverlayClick(e){
+  if(e.target===document.getElementById('cal-modal-overlay'))closeCalModal();
+}
 function setCalPlat(btn,p){
   calPagePlat=p;
-  document.querySelectorAll('#page-calendar .plat-tab').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#cal-modal-overlay .plat-tab').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   const leg=document.getElementById('cal-page-legend');
   if(leg)leg.style.display=p==='all'?'flex':'none';
