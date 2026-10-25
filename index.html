@@ -2440,7 +2440,7 @@ function renderStratFilter(baseList){
   const rrList=list.map(t=>{
     const pnl=parseFloat(t.netPnl);
     if(isNaN(pnl))return null;
-    return parseFloat((pnl/100).toFixed(2));
+    return parseFloat((pnl/50).toFixed(2));
   }).filter(v=>v!==null);
   const avgRR=rrList.length?parseFloat((rrList.reduce((a,v)=>a+v,0)/rrList.length).toFixed(2)):null;
   const totalRR=rrList.length?parseFloat(rrList.reduce((a,v)=>a+v,0).toFixed(2)):null;
@@ -3058,11 +3058,11 @@ function _exportNotionReportWithList(list){
   const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
   const wins=list.filter(t=>(t.netPnl||0)>0).length;
   const wr=list.length?Math.round(wins/list.length*100):0;
-  // 計算平均風報比 (1R=100U)
+  // 計算平均風報比 (1R=50U)
   const rrVals=list.map(t=>{
     const pnl=parseFloat(t.netPnl);
     if(isNaN(pnl))return null;
-    return parseFloat((pnl/100).toFixed(2));
+    return parseFloat((pnl/50).toFixed(2));
   }).filter(v=>v!==null);
   const rrSum=rrVals.length?parseFloat(rrVals.reduce((s,v)=>s+v,0).toFixed(2)):null;
   const avgRR=rrSum!==null?parseFloat((rrSum/rrVals.length).toFixed(2)):null;
@@ -3081,9 +3081,9 @@ function _exportNotionReportWithList(list){
     const exLabel=t.exchange+(t.isOP?' (OP)':'');
     const strats=Array.isArray(t.strats)?t.strats.join('、'):(t.strat||'—');
     const gradeColor=t.grade==='S'?'#7c3aed':t.grade==='A'?'#2563eb':t.grade==='B'?'#16a34a':t.grade==='C'?'#d97706':'#6b7280';
-    // 風報比 (1R=100U)
+    // 風報比 (1R=50U)
     const pnlVal=parseFloat(t.netPnl);
-    const rrVal=isNaN(pnlVal)?null:parseFloat((pnlVal/100).toFixed(2));
+    const rrVal=isNaN(pnlVal)?null:parseFloat((pnlVal/50).toFixed(2));
     const rrStr=rrVal!==null?(rrVal>=0?'+':'')+rrVal.toFixed(2)+'R':'—';
     const rrColor=rrVal===null?'#9ca3af':rrVal>0?'#16a34a':'#ef4444';
     return`<tr class="rpt-row" data-rpt-idx="${i}" style="cursor:pointer;border-bottom:1px solid #f3f4f6">
@@ -3294,7 +3294,7 @@ function rptShowDetail(idx){
         <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">出場價</div><div style="font-size:15px;font-weight:700;color:#374151">${t.exit||'—'}</div></div>
         <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#ef4444;font-weight:600;text-transform:uppercase;margin-bottom:4px">止損</div><div style="font-size:15px;font-weight:700;color:#ef4444">${t.sl||'—'}</div></div>
         <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;margin-bottom:4px">TP</div><div style="font-size:14px;font-weight:700;color:#22c55e">${[t.tp1,t.tp2,t.tp3].filter(Boolean).join(' / ')||'—'}</div></div>
-        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">風報比</div><div style="font-size:15px;font-weight:700;color:${(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'#9ca3af';return p>=0?'#16a34a':'#ef4444';})()}">${(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'—';const rv=parseFloat((p/100).toFixed(2));return(rv>=0?'+':'')+rv.toFixed(2)+'R';})()}</div></div>
+        <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">風報比</div><div style="font-size:15px;font-weight:700;color:${(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'#9ca3af';return p>=0?'#16a34a':'#ef4444';})()}">${(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'—';const rv=parseFloat((p/50).toFixed(2));return(rv>=0?'+':'')+rv.toFixed(2)+'R';})()}</div></div>
         <div style="background:#fff;padding:14px 16px"><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-bottom:4px">情緒</div><div style="font-size:13px;font-weight:600;color:#374151">${esc(t.emotion||'—')}</div></div>
       </div>
       <!-- sections -->
@@ -4414,7 +4414,7 @@ if(window._fbReady){
           ${prop('策略',esc(strats))}
           ${prop('週期',esc(t.tf||'—'))}
           ${prop('評分','<span style="color:'+gc+';font-weight:700">'+(t.grade||'—')+' ('+String(t.score||0)+')</span>')}
-        ${prop('風報比',(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'—';const rv=parseFloat((p/100).toFixed(2));const c=rv>=0?'#16a34a':'#ef4444';return'<span style="color:'+c+';font-weight:700">'+(rv>=0?'+':'')+rv.toFixed(2)+'R</span>';})())}
+        ${prop('風報比',(()=>{const p=parseFloat(t.netPnl);if(isNaN(p))return'—';const rv=parseFloat((p/50).toFixed(2));const c=rv>=0?'#16a34a':'#ef4444';return'<span style="color:'+c+';font-weight:700">'+(rv>=0?'+':'')+rv.toFixed(2)+'R</span>';})())}
         </table>
         ${section('📷','進場截圖',photoGrid(t.images))}
         ${section('📷','出場截圖',photoGrid(t.exitImages))}
