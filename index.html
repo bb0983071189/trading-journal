@@ -497,9 +497,14 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         <input type="password" id="okx-passphrase" placeholder="貼上 Passphrase" oninput="saveApiKeys()">
       </div>
     </div>
-            <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
           <div style="font-size:12px;font-weight:600;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Worker URL <span style="font-weight:400;color:#c0c0c0">（CORS 代理，部署 Cloudflare Worker 後填入）</span></div>
-          <input type="text" id="worker-url-input" placeholder="https://your-worker.your-name.workers.dev" value="" oninput="saveWorkerUrl()" style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;box-sizing:border-box">
+          <input type="text" id="worker-url-input" placeholder="https://your-worker.your-name.workers.dev" value="" oninput="saveWorkerUrl()" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;background:var(--bg2);color:var(--text)">
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">🤖 AI 助手 — Claude API Key</div>
+          <input type="password" id="claude-api-key" placeholder="sk-ant-..." oninput="saveClaudeKey()" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;background:var(--bg2);color:var(--text)">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">填入後即可在右下角 🤖 按鈕與 AI 助手對話，分析你的交易數據</div>
         </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="fetchBingXHistory()" style="font-size:12px">📋 BingX 歷史成交</button>
@@ -4719,6 +4724,307 @@ if(window._fbReady){
   window.rvOpenLb=function(src){const lb=document.getElementById('rv-lb');lb.querySelector('img').src=src;lb.style.display='flex';};
   document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')rvNavTo(-1);if(e.key==='ArrowRight')rvNavTo(1);if(e.key==='Escape')rvGoBack();});
 })();
+</script>
+
+<!-- ===== AI ASSISTANT ===== -->
+<style>
+#ai-fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:22px;z-index:300;transition:transform .2s,box-shadow .2s}
+#ai-fab:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(0,0,0,.32)}
+#ai-fab .ai-fab-badge{position:absolute;top:0;right:0;width:14px;height:14px;border-radius:50%;background:var(--red);border:2px solid var(--bg);font-size:8px;color:#fff;display:none;align-items:center;justify-content:center}
+#ai-panel{position:fixed;bottom:86px;right:24px;width:min(380px,calc(100vw - 32px));height:520px;background:var(--bg);border:1px solid var(--border2);border-radius:16px;box-shadow:0 12px 48px rgba(0,0,0,.22);z-index:299;display:flex;flex-direction:column;opacity:0;pointer-events:none;transform:translateY(16px) scale(.97);transition:opacity .22s,transform .22s}
+#ai-panel.open{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
+.ai-header{padding:14px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.ai-avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-bg);border:1.5px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.ai-header-info{flex:1;min-width:0}
+.ai-header-name{font-size:13px;font-weight:700;color:var(--text)}
+.ai-header-sub{font-size:10px;color:var(--text3)}
+.ai-close-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.ai-close-btn:hover{border-color:var(--accent);color:var(--accent)}
+.ai-msgs{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
+.ai-msg{display:flex;gap:8px;align-items:flex-start}
+.ai-msg.user{flex-direction:row-reverse}
+.ai-msg-bubble{max-width:85%;padding:9px 13px;border-radius:14px;font-size:12.5px;line-height:1.55;word-break:break-word}
+.ai-msg.bot .ai-msg-bubble{background:var(--bg3);color:var(--text);border-bottom-left-radius:4px}
+.ai-msg.user .ai-msg-bubble{background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.ai-msg-icon{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:1px}
+.ai-msg.bot .ai-msg-icon{background:var(--accent-bg)}
+.ai-msg.user .ai-msg-icon{background:var(--bg4)}
+.ai-typing{display:flex;gap:4px;align-items:center;padding:10px 13px}
+.ai-typing span{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:aiDot 1.2s infinite}
+.ai-typing span:nth-child(2){animation-delay:.2s}
+.ai-typing span:nth-child(3){animation-delay:.4s}
+@keyframes aiDot{0%,60%,100%{opacity:.3;transform:scale(1)}30%{opacity:1;transform:scale(1.3)}}
+.ai-quick{padding:8px 12px;display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--border);flex-shrink:0}
+.ai-chip{padding:4px 10px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.ai-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.ai-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0}
+.ai-input{flex:1;padding:8px 12px;border:1px solid var(--border2);border-radius:999px;background:var(--bg3);color:var(--text);font-size:13px;outline:none;transition:border-color .15s}
+.ai-input:focus{border-color:var(--accent)}
+.ai-send-btn{width:34px;height:34px;border-radius:50%;background:var(--accent);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;transition:opacity .15s}
+.ai-send-btn:hover{opacity:.85}
+.ai-send-btn:disabled{opacity:.4;cursor:default}
+.ai-no-key{padding:16px;text-align:center;color:var(--text3);font-size:12px;line-height:1.6}
+.ai-no-key strong{color:var(--accent)}
+</style>
+
+<!-- Floating button -->
+<button id="ai-fab" onclick="toggleAiPanel()" title="AI 交易助手">🤖</button>
+
+<!-- AI Panel -->
+<div id="ai-panel">
+  <div class="ai-header">
+    <div class="ai-avatar">🤖</div>
+    <div class="ai-header-info">
+      <div class="ai-header-name">AI 交易助手</div>
+      <div class="ai-header-sub" id="ai-header-sub">分析你的交易數據</div>
+    </div>
+    <button class="ai-close-btn" onclick="toggleAiPanel()">×</button>
+  </div>
+  <div class="ai-msgs" id="ai-msgs"></div>
+  <div class="ai-quick" id="ai-quick">
+    <button class="ai-chip" onclick="aiAsk('我的整體勝率是多少？')">勝率統計</button>
+    <button class="ai-chip" onclick="aiAsk('哪個交易時段表現最好？')">最佳時段</button>
+    <button class="ai-chip" onclick="aiAsk('我的平均盈虧比是多少？')">盈虧比</button>
+    <button class="ai-chip" onclick="aiAsk('哪個幣種我交易最多次且勝率最高？')">最佳幣種</button>
+    <button class="ai-chip" onclick="aiAsk('根據我的數據，給我3個改善建議')">改善建議</button>
+  </div>
+  <div class="ai-input-row">
+    <input class="ai-input" id="ai-input" placeholder="問我任何關於你交易的問題…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}">
+    <button class="ai-send-btn" id="ai-send-btn" onclick="aiSend()">➤</button>
+  </div>
+</div>
+
+<script>
+// ===== AI ASSISTANT =====
+let aiPanelOpen=false;
+let aiHistory=[];
+
+function saveClaudeKey(){
+  const k=document.getElementById('claude-api-key')?.value||'';
+  try{localStorage.setItem('claude_api_key',k);}catch(e){}
+}
+function loadClaudeKey(){
+  const k=localStorage.getItem('claude_api_key')||'';
+  const el=document.getElementById('claude-api-key');
+  if(el&&k)el.value=k;
+  return k;
+}
+function getClaudeKey(){
+  return document.getElementById('claude-api-key')?.value||localStorage.getItem('claude_api_key')||'';
+}
+
+function toggleAiPanel(){
+  aiPanelOpen=!aiPanelOpen;
+  document.getElementById('ai-panel').classList.toggle('open',aiPanelOpen);
+  if(aiPanelOpen&&document.getElementById('ai-msgs').children.length===0){
+    aiShowWelcome();
+  }
+}
+
+function aiShowWelcome(){
+  const hasKey=!!getClaudeKey();
+  const msgsEl=document.getElementById('ai-msgs');
+  if(!hasKey){
+    msgsEl.innerHTML=`<div class="ai-no-key">
+      <div style="font-size:28px;margin-bottom:8px">🔑</div>
+      <strong>需要 Claude API Key</strong><br>
+      請在 <strong>API 設定</strong> 裡填入你的 Anthropic API Key（sk-ant-...），即可開始使用 AI 助手分析你的交易數據。
+    </div>`;
+    document.getElementById('ai-quick').style.display='none';
+    return;
+  }
+  document.getElementById('ai-quick').style.display='flex';
+  aiAddMsg('bot',`👋 你好！我是你的 AI 交易助手。\n\n我已經讀取了你目前 <strong>${(window.trades||[]).length} 筆</strong>交易紀錄，可以幫你分析：\n• 勝率與盈虧統計\n• 最佳交易時段\n• 幣種表現排名\n• 情緒與紀律分析\n\n你想了解哪方面？`);
+}
+
+function aiAddMsg(role,text){
+  const msgsEl=document.getElementById('ai-msgs');
+  const div=document.createElement('div');
+  div.className='ai-msg '+role;
+  const icon=document.createElement('div');
+  icon.className='ai-msg-icon';
+  icon.textContent=role==='bot'?'🤖':'👤';
+  const bubble=document.createElement('div');
+  bubble.className='ai-msg-bubble';
+  bubble.innerHTML=text.replace(/\n/g,'<br>');
+  div.appendChild(icon);
+  div.appendChild(bubble);
+  msgsEl.appendChild(div);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+  return div;
+}
+
+function aiShowTyping(){
+  const msgsEl=document.getElementById('ai-msgs');
+  const div=document.createElement('div');
+  div.className='ai-msg bot';
+  div.id='ai-typing-indicator';
+  div.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble ai-typing"><span></span><span></span><span></span></div>`;
+  msgsEl.appendChild(div);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+}
+function aiRemoveTyping(){
+  document.getElementById('ai-typing-indicator')?.remove();
+}
+
+function buildTradeContext(){
+  const ts=window.trades||[];
+  if(!ts.length)return'目前沒有任何交易紀錄。';
+  // Summary stats
+  const wins=ts.filter(t=>t.pnl>0).length;
+  const losses=ts.filter(t=>t.pnl<0).length;
+  const total=ts.length;
+  const totalPnl=ts.reduce((s,t)=>s+(t.pnl||0),0);
+  const avgWin=wins?ts.filter(t=>t.pnl>0).reduce((s,t)=>s+t.pnl,0)/wins:0;
+  const avgLoss=losses?ts.filter(t=>t.pnl<0).reduce((s,t)=>s+t.pnl,0)/losses:0;
+
+  // By symbol
+  const symMap={};
+  ts.forEach(t=>{
+    const s=t.symbol||t.sym||'Unknown';
+    if(!symMap[s])symMap[s]={n:0,wins:0,pnl:0};
+    symMap[s].n++;if(t.pnl>0)symMap[s].wins++;
+    symMap[s].pnl+=(t.pnl||0);
+  });
+  const topSyms=Object.entries(symMap).sort((a,b)=>b[1].n-a[1].n).slice(0,8)
+    .map(([s,v])=>`${s}: ${v.n}次 勝率${v.n?(v.wins/v.n*100).toFixed(0):0}% 盈虧${v.pnl>=0?'+':''}${v.pnl.toFixed(2)}U`).join('\n');
+
+  // By hour
+  const hourMap={};
+  ts.forEach(t=>{
+    const h=t.entryTime?parseInt(t.entryTime.split(':')[0]):null;
+    if(h===null)return;
+    if(!hourMap[h])hourMap[h]={n:0,wins:0,pnl:0};
+    hourMap[h].n++;if(t.pnl>0)hourMap[h].wins++;
+    hourMap[h].pnl+=(t.pnl||0);
+  });
+  const hourStats=Object.entries(hourMap).sort((a,b)=>a[0]-b[0])
+    .map(([h,v])=>`${h}時: ${v.n}次 勝率${(v.wins/v.n*100).toFixed(0)}% 盈虧${v.pnl>=0?'+':''}${v.pnl.toFixed(2)}U`).join('\n');
+
+  // By platform
+  const platMap={};
+  ts.forEach(t=>{
+    const p=(t.exchange==='BingX'&&t.isOP)?'BingX(OP)':(t.exchange||'OKX');
+    if(!platMap[p])platMap[p]={n:0,wins:0,pnl:0};
+    platMap[p].n++;if(t.pnl>0)platMap[p].wins++;
+    platMap[p].pnl+=(t.pnl||0);
+  });
+  const platStats=Object.entries(platMap)
+    .map(([p,v])=>`${p}: ${v.n}次 勝率${(v.wins/v.n*100).toFixed(0)}% 盈虧${v.pnl>=0?'+':''}${v.pnl.toFixed(2)}U`).join('\n');
+
+  // By emotion
+  const emoMap={};
+  ts.forEach(t=>{
+    const e=t.emotion||'未記錄';
+    if(!emoMap[e])emoMap[e]={n:0,wins:0};
+    emoMap[e].n++;if(t.pnl>0)emoMap[e].wins++;
+  });
+  const emoStats=Object.entries(emoMap)
+    .map(([e,v])=>`${e}: ${v.n}次 勝率${v.n?(v.wins/v.n*100).toFixed(0):0}%`).join('\n');
+
+  // Recent 10 trades
+  const recent=ts.slice(-10).map(t=>`${t.date||''} ${t.symbol||t.sym||''} ${t.direction||''} 盈虧:${t.pnl>=0?'+':''}${(t.pnl||0).toFixed(2)}U`).join('\n');
+
+  return`=== 交易統計摘要 ===
+總筆數: ${total} | 勝: ${wins} | 敗: ${losses} | 勝率: ${total?(wins/total*100).toFixed(1):0}%
+總盈虧: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}U
+平均獲利: +${avgWin.toFixed(2)}U | 平均虧損: ${avgLoss.toFixed(2)}U
+盈虧比: ${avgLoss?Math.abs(avgWin/avgLoss).toFixed(2):'N/A'}
+
+=== 幣種分布（前8）===
+${topSyms||'無'}
+
+=== 各時段統計 ===
+${hourStats||'無時間數據'}
+
+=== 各平台統計 ===
+${platStats||'無'}
+
+=== 開單情緒統計 ===
+${emoStats||'無'}
+
+=== 最近10筆交易 ===
+${recent||'無'}`;
+}
+
+async function aiAsk(question){
+  document.getElementById('ai-input').value=question;
+  await aiSend();
+}
+
+async function aiSend(){
+  const input=document.getElementById('ai-input');
+  const q=input.value.trim();
+  if(!q)return;
+  const key=getClaudeKey();
+  if(!key){
+    aiAddMsg('bot','請先在 <strong>API 設定</strong> 填入 Claude API Key（sk-ant-...）才能使用 AI 助手。');
+    document.getElementById('ai-quick').style.display='none';
+    // Show welcome to re-check
+    return;
+  }
+  input.value='';
+  document.getElementById('ai-send-btn').disabled=true;
+  document.getElementById('ai-quick').style.display='none';
+
+  aiAddMsg('user',q);
+  aiHistory.push({role:'user',content:q});
+
+  aiShowTyping();
+
+  const systemPrompt=`你是一個專業的加密貨幣交易分析 AI 助手，幫助交易者分析他們的交易日誌數據。
+請根據以下用戶的交易數據來回答問題。回答時：
+- 使用繁體中文
+- 回答要具體、有數據支撐
+- 語氣專業但友善
+- 如果能給出改善建議，請簡明列出
+- 回答控制在200字以內
+
+${buildTradeContext()}`;
+
+  try{
+    const messages=aiHistory.slice(-8); // keep last 8 for context
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-calls':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:600,
+        system:systemPrompt,
+        messages:messages
+      })
+    });
+    aiRemoveTyping();
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({}));
+      const msg=err?.error?.message||`HTTP ${resp.status}`;
+      if(resp.status===401)aiAddMsg('bot','❌ API Key 無效，請確認 Claude API Key 是否正確（sk-ant-...）');
+      else aiAddMsg('bot',`❌ 請求失敗：${msg}`);
+      aiHistory.pop();
+    }else{
+      const data=await resp.json();
+      const reply=data.content?.[0]?.text||'（無回應）';
+      aiHistory.push({role:'assistant',content:reply});
+      aiAddMsg('bot',reply);
+    }
+  }catch(err){
+    aiRemoveTyping();
+    aiAddMsg('bot',`❌ 連線錯誤：${err.message}\n\n請確認網路連線正常，或 API Key 有效。`);
+    aiHistory.pop();
+  }finally{
+    document.getElementById('ai-send-btn').disabled=false;
+    document.getElementById('ai-quick').style.display='flex';
+  }
+}
+
+// Load Claude key on init
+document.addEventListener('DOMContentLoaded',()=>{ loadClaudeKey(); });
+setTimeout(loadClaudeKey, 500);
 </script>
 </body>
 </html>
