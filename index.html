@@ -3795,9 +3795,7 @@ async function importExitFromExchange(exchangeOverride){
           (o.reduceOnly===true||o.reduceOnly==='true')&&
           o.profit!==''&&o.profit!==undefined
         ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
-        // 分群邏輯：同方向、時間差 <= 30分鐘的視為同一倉位分批出場，合併為一筆
-        // 超過30分鐘的視為獨立倉位，各自成一筆讓用戶選
-        const SAME_POS_GAP_MS = 30 * 60 * 1000; // 30 分鐘
+        // 合併邏輯：同 side 的所有平倉單視為同一張倉位，全部合併，不限時間差
         if(rawFills.length>1){
           // 先按方向分組
           const bySide={};
@@ -3808,42 +3806,23 @@ async function importExitFromExchange(exchangeOverride){
           });
           fills=[];
           Object.values(bySide).forEach(group=>{
-            // group 已按 updateTime 降序排列；反轉成升序處理
-            const asc=[...group].reverse();
-            // 用時間窗口把連續的分批出場合併
-            let batches=[];
-            let cur=[asc[0]];
-            for(let i=1;i<asc.length;i++){
-              const prev=parseInt(asc[i-1].updateTime||0);
-              const curr=parseInt(asc[i].updateTime||0);
-              if(curr-prev<=SAME_POS_GAP_MS){
-                cur.push(asc[i]);
-              }else{
-                batches.push(cur);
-                cur=[asc[i]];
-              }
-            }
-            batches.push(cur);
-            // 每個 batch 合併為一筆，按最新時間降序放入 fills
-            batches.reverse().forEach(batch=>{
-              const totalQty=batch.reduce((s,o)=>s+parseFloat(o.executedQty||o.quantity||1),0);
-              const wAvgPrice=batch.reduce((s,o)=>s+parseFloat(o.avgPrice||o.price||0)*parseFloat(o.executedQty||o.quantity||1),0)/totalQty;
-              const totalProfit=batch.reduce((s,o)=>s+parseFloat(o.profit||0),0);
-              const totalComm=batch.reduce((s,o)=>s+Math.abs(parseFloat(o.commission||o.fee||0)),0);
-              const latestTime=Math.max(...batch.map(o=>parseInt(o.updateTime||0)));
-              const earliestTime=Math.min(...batch.map(o=>parseInt(o.updateTime||0)));
-              fills.push({
-                avgPrice: wAvgPrice,
-                profit: totalProfit,
-                commission: totalComm,
-                updateTime: latestTime,
-                _openTime: earliestTime!==latestTime?earliestTime:0,
-                type: batch[batch.length-1].type||'manual',
-                positionSide: batch[0].positionSide||batch[0].side||'',
-                _fromBingX2: exchange==='BingX2',
-                _merged: batch.length>1,
-                _mergedCount: batch.length
-              });
+            // 同 side 全合併為一筆，使用最後一筆的出場價
+            const totalProfit=group.reduce((s,o)=>s+parseFloat(o.profit||0),0);
+            const totalComm=group.reduce((s,o)=>s+Math.abs(parseFloat(o.commission||o.fee||0)),0);
+            const latestTime=Math.max(...group.map(o=>parseInt(o.updateTime||0)));
+            const earliestTime=Math.min(...group.map(o=>parseInt(o.updateTime||0)));
+            const latestFill=group.reduce((a,b)=>parseInt(a.updateTime||0)>=parseInt(b.updateTime||0)?a:b);
+            fills.push({
+              avgPrice: parseFloat(latestFill.avgPrice||latestFill.price||0),
+              profit: totalProfit,
+              commission: totalComm,
+              updateTime: latestTime,
+              _openTime: earliestTime!==latestTime?earliestTime:0,
+              type: latestFill.type||'manual',
+              positionSide: group[0].positionSide||group[0].side||'',
+              _fromBingX2: exchange==='BingX2',
+              _merged: group.length>1,
+              _mergedCount: group.length
             });
           });
         } else {
