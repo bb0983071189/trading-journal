@@ -1119,20 +1119,17 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <!-- 從交易所帶入按鈕 -->
     <div style="margin-bottom:8px">
       <div style="font-size:10px;color:var(--text3);margin-bottom:5px">⚡ 從交易所帶入最新成交</div>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn" onclick="importExitFromExchange('BingX')"
-          style="flex:1;padding:7px 10px;font-size:12px;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="exit-btn-bingx" onclick="importExitFromExchange('BingX')"
+          style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
           ⚡ BingX
         </button>
-        <div style="display:flex;flex-direction:column;align-items:center;gap:1px;flex:1">
-          <div style="font-size:9px;color:var(--text3);font-weight:700">OP</div>
-          <button class="btn" onclick="importExitFromExchange('BingX2')"
-            style="width:100%;padding:7px 10px;font-size:12px;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
-            ⚡ BingX
-          </button>
-        </div>
-        <button class="btn" onclick="importExitFromExchange('OKX')"
-          style="flex:1;padding:7px 10px;font-size:12px;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd">
+        <button class="btn" id="exit-btn-bingx2" onclick="importExitFromExchange('BingX2')"
+          style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--green-bg);color:var(--green);border-color:#6ee7b7">
+          ⚡ BingX ⚡
+        </button>
+        <button class="btn" id="exit-btn-okx" onclick="importExitFromExchange('OKX')"
+          style="padding:8px 14px;font-size:12px;white-space:nowrap;background:var(--blue-bg);color:var(--blue);border-color:#93c5fd">
           ⚡ OKX
         </button>
       </div>
@@ -3738,6 +3735,16 @@ async function importExitFromExchange(exchangeOverride){
 
   // Use specified exchange or fall back to trade's exchange
   const exchange=exchangeOverride||t.exchange;
+
+  // Highlight active import button
+  ['bingx','bingx2','okx'].forEach(k=>{
+    const b=document.getElementById('exit-btn-'+k);
+    if(b)b.classList.remove('on');
+  });
+  const activeKey=exchange==='BingX2'?'bingx2':exchange==='BingX'?'bingx':'okx';
+  const activeBtn=document.getElementById('exit-btn-'+activeKey);
+  if(activeBtn)activeBtn.classList.add('on');
+
   setExImportStatus('正在從 '+exchange+' 查詢最新成交…','var(--blue)');
 
   try{
