@@ -1145,7 +1145,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     </div>
     <div id="ex-import-status" style="font-size:11px;color:var(--text2);margin-bottom:8px;display:none"></div>
     <div class="g3" style="margin-bottom:9px">
-      <div class="f"><label>出場價格</label><input type="number" id="ex-exit" placeholder="0.00" step="any" oninput="if(!window._apiImportActive){window._importedExitPnl=undefined;}calcExitPnl()"></div>
+      <div class="f"><label>出場價格</label><input type="number" id="ex-exit" placeholder="0.00" step="any" oninput="calcExitPnl()"></div>
       <div class="f"><label>出場時間</label><input type="time" id="ex-xtime"></div>
       <div class="f"><label>出場原因</label>
         <select id="ex-xr" onchange="calcExitPnl()">
@@ -2166,8 +2166,15 @@ function exqa(qid,val,btn,key){
 }
 
 function calcExitPnl(){
-  // If we have an imported PnL from API, don't overwrite it
-  if(window._importedExitPnl!==undefined)return;
+  // If we have an imported PnL from API, keep it (manual price edit does NOT clear it)
+  if(window._importedExitPnl!==undefined){
+    // Re-render the calc box with the stored API pnl so display stays correct
+    const calcBox=document.getElementById('ex-calc-box');
+    const netEl=document.getElementById('ex-net');
+    if(netEl){netEl.textContent=(window._importedExitPnl>=0?'+':'')+window._importedExitPnl.toFixed(4)+' USDT';netEl.style.color=window._importedExitPnl>=0?'var(--green)':'var(--red)';}
+    if(calcBox)calcBox.style.display='block';
+    return;
+  }
   const t=window._exitTrade;if(!t)return;
   const exit=parseFloat(document.getElementById('ex-exit').value)||0;
   const xr=document.getElementById('ex-xr').value;
