@@ -3755,6 +3755,7 @@ async function importExitFromExchange(exchangeOverride){
           commission: Math.abs(parseFloat(p.fee||p.commission||0)), // 手續費（從API直接讀）
           _realizedPnl: parseFloat(p.realisedProfit??p.realizedPnl??p.netProfit??0), // 已實現盈虧
           updateTime: parseInt(p.closeTime||p.updateTime||Date.now()),
+          _openTime: parseInt(p.openTime||p.createTime||0), // 開倉時間（用於選擇器顯示）
           type: p.closeType||'manual',
           positionSide: p.positionSide||'',
           _fromBingX2: exchange==='BingX2',
@@ -3854,14 +3855,17 @@ async function importExitFromExchange(exchangeOverride){
     }
 
     const exType=(exchange==='OKX')?'OKX':'BingX';
-    // BingX positionHistory: fills[0] = 最新完整平倉，realisedProfit = 整個倉位總損益（含分批）
-    // 直接自動帶入，不彈選擇器
+    // 決定是否需要選擇器
     if(fills.length===0){
       setExImportStatus('沒有找到出場記錄，請手動填寫','var(--amber)');
-    } else if(exType==='BingX'&&fills[0]._fromPosHistory){
+    } else if(fills.length===1){
+      // 只有一筆，直接帶入
       applyExitFill(fills[0],exType);
-    } else if(fills.length===1||(exchange==='OKX'&&fills[0]?._merged)){
-      // OKX 合併後直接帶入，不彈選擇器
+    } else if(exType==='BingX'&&fills[0]._fromPosHistory){
+      // BingX positionHistory 有多筆 → 不同時間的獨立倉位，讓用戶選
+      showExitFillSelector(fills,exType);
+    } else if(exchange==='OKX'&&fills[0]?._merged){
+      // OKX 合併後只剩一筆，直接帶入
       applyExitFill(fills[0],exType);
     } else {
       showExitFillSelector(fills,exType);
@@ -3885,17 +3889,28 @@ function showExitFillSelector(fills,exchange){
   const html=fills.slice(0,10).map((o,i)=>{
     const ts=parseInt(exchange==='BingX'?(o.updateTime||o.time):( o.uTime||o.cTime)||Date.now());
     const d=new Date(ts);
-    const pnl=parseFloat(exchange==='BingX'?o.profit:o.pnl||0);
+    const fmtTime=t=>{ const x=new Date(t); return x.toLocaleDateString('zh-TW',{month:'2-digit',day:'2-digit'})+' '+x.toTimeString().slice(0,5); };
+
+    // BingX positionHistory 有開倉時間
+    let timeStr=fmtTime(ts);
+    if(o._fromPosHistory&&o._openTime){
+      timeStr='開 '+fmtTime(parseInt(o._openTime))+' → 平 '+fmtTime(ts);
+    }
+
+    // 顯示已實現盈虧（positionHistory 用 _realizedPnl，其他用 profit/pnl）
+    const pnl=o._fromPosHistory
+      ? parseFloat(o._realizedPnl||o.profit||0)
+      : parseFloat(exchange==='BingX'?o.profit:(o.pnl||0));
     const price=parseFloat(exchange==='BingX'?o.avgPrice:(o.avgPx||0));
     const pnlColor=pnl>=0?'var(--green)':'var(--red)';
     return '<div style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;margin-bottom:6px" '+
       'onclick="applyExitFillIdx('+i+',\''+exchange+'\')" '+
       'onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
-      '<div style="display:flex;justify-content:space-between">' +
-      '<span style="font-size:12px">'+(d.toISOString().slice(0,10))+' '+(d.toTimeString().slice(0,5))+'</span>' +
-      '<span style="font-weight:700;color:'+pnlColor+'">'+(pnl>=0?'+':'')+pnl.toFixed(4)+' U</span>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<span style="font-size:11px;color:var(--text2)">'+timeStr+'</span>' +
+      '<span style="font-weight:700;color:'+pnlColor+';font-size:13px">'+(pnl>=0?'+':'')+pnl.toFixed(4)+' U</span>' +
       '</div>' +
-      '<div style="font-size:11px;color:var(--text2)">出場價：'+price+'</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:2px">出場價：'+price+'</div>' +
       '</div>';
   }).join('');
 
