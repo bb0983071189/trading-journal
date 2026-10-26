@@ -3777,9 +3777,11 @@ async function importExitFromExchange(exchangeOverride){
           avgPrice: parseFloat(p.closePrice||p.avgClosePrice||0),
           profit: parseFloat(p.tradingProfit||p.profit||0),        // 平倉毛利
           commission: Math.abs(parseFloat(p.fee||p.commission||0)), // 手續費（從API直接讀）
-          _realizedPnl: parseFloat(p.realisedProfit??p.realizedPnl??p.netProfit??0), // 已實現盈虧
+          // 已實現盈虧：優先用 realisedProfit（BingX 已扣除開+平倉手續費+資金費的淨損益）
+          _realizedPnl: parseFloat(p.realisedProfit??p.netProfit??p.realizedPnl??0),
+          // 開倉時間：BingX positionHistory 用 openTime（毫秒），不用 createTime
           updateTime: parseInt(p.closeTime||p.updateTime||Date.now()),
-          _openTime: parseInt(p.openTime||p.createTime||0), // 開倉時間（用於選擇器顯示）
+          _openTime: parseInt(p.openTime||0), // 只用 openTime，避免 createTime 讀到錯誤時間
           type: p.closeType||'manual',
           positionSide: p.positionSide||'',
           _fromBingX2: exchange==='BingX2',
