@@ -4783,6 +4783,33 @@ if(window._fbReady){
 .ai-send-btn:disabled{opacity:.4;cursor:default}
 .ai-no-key{padding:16px;text-align:center;color:var(--text3);font-size:12px;line-height:1.6}
 .ai-no-key strong{color:var(--accent)}
+/* mode tabs */
+.ai-mode-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.ai-mode-tab{flex:1;padding:9px 4px;font-size:12px;font-weight:600;color:var(--text3);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.02em}
+.ai-mode-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+/* review panel */
+.ai-review-panel{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.ai-review-section{background:var(--bg3);border-radius:10px;padding:12px;border:1px solid var(--border)}
+.ai-review-label{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.ai-trade-select{width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:12px;outline:none}
+.ai-trade-select:focus{border-color:var(--accent)}
+.ai-review-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.ai-meta-item{background:var(--bg2);border-radius:6px;padding:6px 8px}
+.ai-meta-key{font-size:9px;color:var(--text3);margin-bottom:2px}
+.ai-meta-val{font-size:12px;font-weight:700;color:var(--text)}
+.ai-meta-val.pos{color:var(--green)}
+.ai-meta-val.neg{color:var(--red)}
+.ai-img-upload{border:1.5px dashed var(--border2);border-radius:8px;padding:12px;text-align:center;cursor:pointer;transition:all .15s;font-size:11px;color:var(--text3)}
+.ai-img-upload:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.ai-img-preview{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ai-img-thumb{position:relative;width:72px;height:54px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.ai-img-thumb img{width:100%;height:100%;object-fit:cover}
+.ai-img-thumb .rm{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ai-review-textarea{width:100%;min-height:70px;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:12px;resize:vertical;outline:none;box-sizing:border-box;line-height:1.5}
+.ai-review-textarea:focus{border-color:var(--accent)}
+.ai-review-submit{width:100%;padding:10px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;letter-spacing:.02em}
+.ai-review-submit:hover{opacity:.88}
+.ai-review-submit:disabled{opacity:.4;cursor:default}
 </style>
 
 <!-- Floating button -->
@@ -4798,17 +4825,75 @@ if(window._fbReady){
     </div>
     <button class="ai-close-btn" onclick="toggleAiPanel()">×</button>
   </div>
-  <div class="ai-msgs" id="ai-msgs"></div>
-  <div class="ai-quick" id="ai-quick">
-    <button class="ai-chip" onclick="aiAsk('我的整體勝率是多少？')">勝率統計</button>
-    <button class="ai-chip" onclick="aiAsk('哪個交易時段表現最好？')">最佳時段</button>
-    <button class="ai-chip" onclick="aiAsk('我的平均盈虧比是多少？')">盈虧比</button>
-    <button class="ai-chip" onclick="aiAsk('哪個幣種我交易最多次且勝率最高？')">最佳幣種</button>
-    <button class="ai-chip" onclick="aiAsk('根據我的數據，給我3個改善建議')">改善建議</button>
+  <!-- Mode tabs -->
+  <div class="ai-mode-tabs">
+    <button class="ai-mode-tab on" id="ai-tab-chat" onclick="switchAiMode('chat')">💬 對話</button>
+    <button class="ai-mode-tab" id="ai-tab-review" onclick="switchAiMode('review')">📊 AI復盤</button>
   </div>
-  <div class="ai-input-row">
-    <input class="ai-input" id="ai-input" placeholder="問我任何關於你交易的問題…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}">
-    <button class="ai-send-btn" id="ai-send-btn" onclick="aiSend()">➤</button>
+  <!-- Chat mode -->
+  <div id="ai-chat-mode" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+    <div class="ai-msgs" id="ai-msgs"></div>
+    <div class="ai-quick" id="ai-quick">
+      <button class="ai-chip" onclick="aiAsk('我的整體勝率是多少？')">勝率統計</button>
+      <button class="ai-chip" onclick="aiAsk('哪個交易時段表現最好？')">最佳時段</button>
+      <button class="ai-chip" onclick="aiAsk('我的平均盈虧比是多少？')">盈虧比</button>
+      <button class="ai-chip" onclick="aiAsk('哪個幣種我交易最多次且勝率最高？')">最佳幣種</button>
+      <button class="ai-chip" onclick="aiAsk('根據我的數據，給我3個改善建議')">改善建議</button>
+    </div>
+    <div class="ai-input-row">
+      <input class="ai-input" id="ai-input" placeholder="問我任何關於你交易的問題…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}">
+      <button class="ai-send-btn" id="ai-send-btn" onclick="aiSend()">➤</button>
+    </div>
+  </div>
+  <!-- Review mode -->
+  <div id="ai-review-mode" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="ai-review-panel" id="ai-review-panel">
+      <!-- Trade selector -->
+      <div class="ai-review-section">
+        <div class="ai-review-label">選擇交易（可選）</div>
+        <select class="ai-trade-select" id="ai-review-trade-sel" onchange="aiReviewTradeChanged()">
+          <option value="">── 不綁定特定交易，綜合復盤 ──</option>
+        </select>
+        <div class="ai-review-meta" id="ai-review-meta" style="display:none"></div>
+      </div>
+      <!-- Chart screenshots -->
+      <div class="ai-review-section">
+        <div class="ai-review-label">上傳圖表截圖（最多4張）</div>
+        <div class="ai-img-upload" id="ai-img-drop-zone" onclick="document.getElementById('ai-img-file-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor=''" ondrop="aiHandleImgDrop(event)">
+          📷 點擊或拖放圖表截圖至此
+        </div>
+        <input type="file" id="ai-img-file-input" accept="image/*" multiple style="display:none" onchange="aiHandleImgFiles(this.files)">
+        <div class="ai-img-preview" id="ai-img-preview"></div>
+      </div>
+      <!-- Trade thoughts -->
+      <div class="ai-review-section">
+        <div class="ai-review-label">你的交易思路（選填）</div>
+        <textarea class="ai-review-textarea" id="ai-review-text" placeholder="例如：我看到價格掃了前低流動性後反轉，判斷是 SSL 被掃後的 MSS，在 OB 位進場做多…"></textarea>
+      </div>
+      <!-- Review focus -->
+      <div class="ai-review-section">
+        <div class="ai-review-label">復盤重點</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="ai-chip review-focus-chip on" data-focus="overall" onclick="toggleFocusChip(this)">整體評估</button>
+          <button class="ai-chip review-focus-chip" data-focus="entry" onclick="toggleFocusChip(this)">進場時機</button>
+          <button class="ai-chip review-focus-chip" data-focus="exit" onclick="toggleFocusChip(this)">出場管理</button>
+          <button class="ai-chip review-focus-chip" data-focus="structure" onclick="toggleFocusChip(this)">市場結構</button>
+          <button class="ai-chip review-focus-chip" data-focus="liquidity" onclick="toggleFocusChip(this)">流動性分析</button>
+          <button class="ai-chip review-focus-chip" data-focus="ict" onclick="toggleFocusChip(this)">ICT 模型</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 14px;flex-shrink:0">
+      <button class="ai-review-submit" id="ai-review-submit-btn" onclick="aiSubmitReview()">🔍 開始 AI 復盤分析</button>
+    </div>
+    <!-- Review result area (shown after submit) -->
+    <div id="ai-review-result" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div class="ai-msgs" id="ai-review-msgs" style="flex:1"></div>
+      <div style="padding:10px 14px;flex-shrink:0;display:flex;gap:8px">
+        <button class="ai-chip" style="flex:1" onclick="aiReviewBack()">← 重新復盤</button>
+        <button class="ai-chip" style="flex:1" onclick="aiAskFollowUp()">繼續追問</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5058,6 +5143,326 @@ ${buildTradeContext()}`;
   }finally{
     document.getElementById('ai-send-btn').disabled=false;
     document.getElementById('ai-quick').style.display='flex';
+  }
+}
+
+// ===== AI MODE SWITCHING =====
+let aiCurrentMode='chat';
+function switchAiMode(mode){
+  aiCurrentMode=mode;
+  document.getElementById('ai-tab-chat').classList.toggle('on',mode==='chat');
+  document.getElementById('ai-tab-review').classList.toggle('on',mode==='review');
+  document.getElementById('ai-chat-mode').style.display=mode==='chat'?'flex':'none';
+  document.getElementById('ai-review-mode').style.display=mode==='review'?'flex':'none';
+  if(mode==='review') aiReviewInit();
+}
+
+// ===== AI REVIEW =====
+let reviewImages=[]; // [{dataUrl, mimeType}]
+let reviewFollowUpHistory=[];
+
+function aiReviewInit(){
+  // Populate trade selector
+  const sel=document.getElementById('ai-review-trade-sel');
+  const current=sel.value;
+  while(sel.options.length>1)sel.remove(1);
+  const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
+  const sorted=[...ts].reverse();
+  sorted.forEach((t,i)=>{
+    const pnlOf=v=>v.netPnl??v.pnl??0;
+    const p=pnlOf(t);
+    const label=`${t.date||''} ${t.symbol||t.sym||''} ${t.direction||t.dir||''} ${p>=0?'+':''}${p.toFixed(2)}U`;
+    const opt=document.createElement('option');
+    opt.value=t.id||i;
+    opt.textContent=label;
+    sel.appendChild(opt);
+  });
+  if(current)sel.value=current;
+  aiReviewTradeChanged();
+}
+
+function aiReviewTradeChanged(){
+  const sel=document.getElementById('ai-review-trade-sel');
+  const metaEl=document.getElementById('ai-review-meta');
+  if(!sel.value){metaEl.style.display='none';return;}
+  const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
+  const t=ts.find(x=>(x.id||ts.indexOf(x)).toString()===sel.value);
+  if(!t){metaEl.style.display='none';return;}
+  const pnlOf=v=>v.netPnl??v.pnl??0;
+  const p=pnlOf(t);
+  const isPos=p>=0;
+  metaEl.style.display='grid';
+  metaEl.innerHTML=`
+    <div class="ai-meta-item"><div class="ai-meta-key">幣種</div><div class="ai-meta-val">${t.symbol||t.sym||'-'}</div></div>
+    <div class="ai-meta-item"><div class="ai-meta-key">方向</div><div class="ai-meta-val">${t.direction||t.dir||'-'}</div></div>
+    <div class="ai-meta-item"><div class="ai-meta-key">進場</div><div class="ai-meta-val">${t.entryPrice||'-'}</div></div>
+    <div class="ai-meta-item"><div class="ai-meta-key">出場</div><div class="ai-meta-val">${t.exitPrice||'-'}</div></div>
+    <div class="ai-meta-item"><div class="ai-meta-key">淨盈虧</div><div class="ai-meta-val ${isPos?'pos':'neg'}">${isPos?'+':''}${p.toFixed(2)}U</div></div>
+    <div class="ai-meta-item"><div class="ai-meta-key">情緒</div><div class="ai-meta-val">${t.emotion||'-'}</div></div>
+  `;
+}
+
+function aiHandleImgFiles(files){
+  const arr=Array.from(files);
+  arr.forEach(f=>{
+    if(reviewImages.length>=4)return;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      reviewImages.push({dataUrl:e.target.result,mimeType:f.type||'image/jpeg'});
+      aiRenderImgPreviews();
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function aiHandleImgDrop(e){
+  e.preventDefault();
+  document.getElementById('ai-img-drop-zone').style.borderColor='';
+  aiHandleImgFiles(e.dataTransfer.files);
+}
+
+function aiRenderImgPreviews(){
+  const el=document.getElementById('ai-img-preview');
+  el.innerHTML='';
+  reviewImages.forEach((img,i)=>{
+    const wrap=document.createElement('div');
+    wrap.className='ai-img-thumb';
+    wrap.innerHTML=`<img src="${img.dataUrl}"><div class="rm" onclick="aiRemoveImg(${i})">×</div>`;
+    el.appendChild(wrap);
+  });
+  const zone=document.getElementById('ai-img-drop-zone');
+  zone.style.display=reviewImages.length>=4?'none':'block';
+}
+
+function aiRemoveImg(i){
+  reviewImages.splice(i,1);
+  aiRenderImgPreviews();
+}
+
+function toggleFocusChip(btn){
+  btn.classList.toggle('on');
+}
+
+function getSelectedFocuses(){
+  return Array.from(document.querySelectorAll('.review-focus-chip.on'))
+    .map(b=>b.dataset.focus);
+}
+
+async function aiSubmitReview(){
+  const key=getClaudeKey();
+  if(!key){
+    alert('請先在 API 設定 填入 Claude API Key');
+    return;
+  }
+  const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
+  const sel=document.getElementById('ai-review-trade-sel');
+  const userText=document.getElementById('ai-review-text').value.trim();
+  const focuses=getSelectedFocuses();
+
+  // Build selected trade detail
+  let tradeDetail='';
+  if(sel.value){
+    const t=ts.find(x=>(x.id||ts.indexOf(x)).toString()===sel.value);
+    if(t){
+      const pnlOf=v=>v.netPnl??v.pnl??0;
+      tradeDetail=`
+=== 本次復盤交易 ===
+日期: ${t.date||'-'} | 時間: ${t.entryTime||'-'}
+幣種: ${t.symbol||t.sym||'-'} | 方向: ${t.direction||t.dir||'-'}
+進場價: ${t.entryPrice||'-'} | 出場價: ${t.exitPrice||'-'}
+槓桿: ${t.leverage||'-'}x | 手數: ${t.contracts||t.quantity||'-'}
+淨盈虧: ${pnlOf(t)>=0?'+':''}${pnlOf(t).toFixed(2)}U | 手續費: ${t.fees||t.fee||0}U
+情緒狀態: ${t.emotion||'-'}
+交易理由: ${t.reason||t.note||'-'}
+`;
+    }
+  }
+
+  const focusText=focuses.length?`\n請特別針對以下方面進行深入分析：${focuses.map(f=>({
+    overall:'整體表現評估',entry:'進場時機選擇',exit:'出場管理策略',
+    structure:'市場結構分析',liquidity:'流動性位置識別',ict:'ICT 交易模型應用'
+  }[f]||f)).join('、')}`:''
+
+  const systemPrompt=`你是一位精通 ICT（Inner Circle Trader）交易方法的專業加密貨幣交易複盤師。你深度理解以下 ICT 概念並能從圖表和交易數據中識別它們：
+
+**市場結構**
+- Market Structure Shift (MSS) / Break of Structure (BOS)
+- Higher High/Low (HH/HL) 多頭結構 vs Lower High/Low (LH/LL) 空頭結構
+- Change of Character (ChoCH)
+
+**流動性概念**
+- Buy Side Liquidity (BSL) / Sell Side Liquidity (SSL)
+- Equal Highs/Lows (EQH/EQL) 流動性池
+- Liquidity Sweep / Stop Hunt
+- Liquidity Void / Imbalance
+
+**價格交付模型**
+- Order Block (OB) — 最後一根反向K棒前的蠟燭
+- Breaker Block — 被突破的 OB 轉為反向支撐/阻力
+- Fair Value Gap (FVG) / Imbalance — 三K棒模式的價格缺口
+- Mitigation Block
+- Rejection Block
+
+**時間與概念**
+- Power of 3 (AMD) — Accumulation, Manipulation, Distribution
+- Kill Zones — London Open (2:00-5:00 UTC), New York Open (12:30-15:30 UTC)
+- IPDA (Interbank Price Delivery Algorithm) Data Ranges — 20/40/60日高低
+- Premium & Discount Array — 利用 Fibonacci 50% 劃分溢價/折扣區
+- Optimal Trade Entry (OTE) — 0.618-0.786 Fib 回調進場區
+- Daily/Weekly/Monthly Bias
+
+**風險管理**
+- 建議 R:R 至少 1:2 以上
+- Stop Loss 應置於結構之外（OB下方/SSL上方）
+
+**復盤規則**：
+1. 優先從圖表截圖分析市場結構和關鍵位
+2. 結合交易數據判斷進出場是否符合 ICT 原則
+3. 明確指出做得好的地方和需要改進的地方
+4. 給出具體、可執行的改進建議
+5. 使用繁體中文回答，專業術語可保留英文縮寫
+6. 回答結構化：先總結評分，再分析，最後給建議
+
+${buildTradeContext()}
+${tradeDetail}`;
+
+  // Build message content
+  const contentParts=[];
+
+  // Add images if any
+  reviewImages.forEach(img=>{
+    const base64=img.dataUrl.split(',')[1];
+    contentParts.push({
+      type:'image',
+      source:{type:'base64',media_type:img.mimeType,data:base64}
+    });
+  });
+
+  // Build text prompt
+  let textPrompt='請對這筆交易進行詳細的 ICT 復盤分析。';
+  if(userText)textPrompt+=`\n\n交易者的思路與描述：\n${userText}`;
+  if(focusText)textPrompt+=focusText;
+  if(!sel.value&&!reviewImages.length)textPrompt='請根據我的整體交易數據進行 ICT 風格的復盤分析，找出我的優勢模式和需要改進的地方。';
+  contentParts.push({type:'text',text:textPrompt});
+
+  // Show result area
+  document.getElementById('ai-review-panel').style.display='none';
+  document.querySelector('#ai-review-mode>div[style*="padding"]').style.display='none';
+  const resultEl=document.getElementById('ai-review-result');
+  resultEl.style.display='flex';
+  const msgsEl=document.getElementById('ai-review-msgs');
+  msgsEl.innerHTML='';
+  reviewFollowUpHistory=[];
+
+  // Show loading
+  const loadDiv=document.createElement('div');
+  loadDiv.className='ai-msg bot';
+  loadDiv.id='ai-review-loading';
+  loadDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble ai-typing"><span></span><span></span><span></span></div>`;
+  msgsEl.appendChild(loadDiv);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+
+  try{
+    const workerUrl=(localStorage.getItem('worker_url')||'').replace(/\/$/,'');
+    const endpoint=workerUrl?`${workerUrl}/ai`:'https://api.anthropic.com/v1/messages';
+    const headers={'Content-Type':'application/json'};
+    if(workerUrl){headers['x-worker-auth']=key;}
+    else{headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';headers['anthropic-dangerous-direct-browser-calls']='true';}
+    const body={model:'claude-haiku-4-5-20251001',max_tokens:1200,system:systemPrompt,
+      messages:[{role:'user',content:contentParts}]};
+    if(workerUrl)body['x-claude-key']=key;
+
+    const resp=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)});
+    loadDiv.remove();
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({}));
+      const errMsg=document.createElement('div');
+      errMsg.className='ai-msg bot';
+      errMsg.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble">❌ 錯誤：${err?.error?.message||`HTTP ${resp.status}`}</div>`;
+      msgsEl.appendChild(errMsg);
+    }else{
+      const data=await resp.json();
+      const reply=data.content?.[0]?.text||'（無回應）';
+      reviewFollowUpHistory=[
+        {role:'user',content:contentParts},
+        {role:'assistant',content:reply}
+      ];
+      const replyDiv=document.createElement('div');
+      replyDiv.className='ai-msg bot';
+      replyDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble">${reply.replace(/\n/g,'<br>')}</div>`;
+      msgsEl.appendChild(replyDiv);
+      msgsEl.scrollTop=msgsEl.scrollHeight;
+    }
+  }catch(err){
+    loadDiv.remove();
+    const errDiv=document.createElement('div');
+    errDiv.className='ai-msg bot';
+    errDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble">❌ 連線錯誤：${err.message}</div>`;
+    msgsEl.appendChild(errDiv);
+  }
+}
+
+function aiReviewBack(){
+  document.getElementById('ai-review-result').style.display='none';
+  document.getElementById('ai-review-panel').style.display='flex';
+  const submitRow=document.querySelector('#ai-review-mode>div[style*="padding"]');
+  if(submitRow)submitRow.style.display='block';
+}
+
+async function aiAskFollowUp(){
+  const q=prompt('請輸入追問內容：');
+  if(!q)return;
+  const key=getClaudeKey();
+  if(!key||!reviewFollowUpHistory.length)return;
+  const msgsEl=document.getElementById('ai-review-msgs');
+
+  const userDiv=document.createElement('div');
+  userDiv.className='ai-msg user';
+  userDiv.innerHTML=`<div class="ai-msg-icon">👤</div><div class="ai-msg-bubble">${q.replace(/\n/g,'<br>')}</div>`;
+  msgsEl.appendChild(userDiv);
+
+  const loadDiv=document.createElement('div');
+  loadDiv.className='ai-msg bot';
+  loadDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble ai-typing"><span></span><span></span><span></span></div>`;
+  msgsEl.appendChild(loadDiv);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+
+  const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
+  const systemPrompt=`你是精通 ICT 交易方法的專業複盤師。使用繁體中文回答。${buildTradeContext()}`;
+  const messages=[...reviewFollowUpHistory,{role:'user',content:q}];
+
+  try{
+    const workerUrl=(localStorage.getItem('worker_url')||'').replace(/\/$/,'');
+    const endpoint=workerUrl?`${workerUrl}/ai`:'https://api.anthropic.com/v1/messages';
+    const headers={'Content-Type':'application/json'};
+    if(workerUrl){headers['x-worker-auth']=key;}
+    else{headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';headers['anthropic-dangerous-direct-browser-calls']='true';}
+    const body={model:'claude-haiku-4-5-20251001',max_tokens:800,system:systemPrompt,messages};
+    if(workerUrl)body['x-claude-key']=key;
+    const resp=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)});
+    loadDiv.remove();
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({}));
+      const errDiv=document.createElement('div');
+      errDiv.className='ai-msg bot';
+      errDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble">❌ ${err?.error?.message||`HTTP ${resp.status}`}</div>`;
+      msgsEl.appendChild(errDiv);
+    }else{
+      const data=await resp.json();
+      const reply=data.content?.[0]?.text||'（無回應）';
+      reviewFollowUpHistory.push({role:'user',content:q},{role:'assistant',content:reply});
+      const replyDiv=document.createElement('div');
+      replyDiv.className='ai-msg bot';
+      replyDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble">${reply.replace(/\n/g,'<br>')}</div>`;
+      msgsEl.appendChild(replyDiv);
+      msgsEl.scrollTop=msgsEl.scrollHeight;
+    }
+  }catch(err){
+    loadDiv.remove();
+    const errDiv=document.createElement('div');
+    errDiv.className='ai-msg bot';
+    errDiv.innerHTML=`<div class="ai-msg-icon">🤖</div><div class="ai-msg-bubble">❌ ${err.message}</div>`;
+    msgsEl.appendChild(errDiv);
   }
 }
 
