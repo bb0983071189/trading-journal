@@ -1279,6 +1279,7 @@ const S={
   p2Hold:null,p2Avg:null,p2TpM:null,p2Liq:null,p2Follow:null
 };
 let trades=JSON.parse(localStorage.getItem('tj_pro_v1')||'[]');
+window.trades=trades; // expose for AI assistant
 let recF='all',repF='all',recPlat='all',repPlat='all';
 let pnlChart=null,stratChart=null,sfChart=null;
 let sfSelected=new Set(['all']);
@@ -1368,6 +1369,7 @@ function initFirebase(){
     const remote=snap.docs.map(d=>({...d.data(),id:Number(d.id)||d.id}));
     remote.sort((a,b)=>b.id-a.id);
     trades=mergeImagesIntoTrades(remote);
+    window.trades=trades; // keep AI assistant in sync
     saveLS();
     renderRec();
     if(document.getElementById('page-report').classList.contains('on'))renderRep();
@@ -3066,7 +3068,7 @@ function exportCSV(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='交易日誌_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
-function clearAll(){if(!confirm('確定清除所有交易紀錄？此操作無法復原。'))return;trades=[];saveLS();fbClearAll();renderRec();}
+function clearAll(){if(!confirm('確定清除所有交易紀錄？此操作無法復原。'))return;trades=[];window.trades=trades;saveLS();fbClearAll();renderRec();}
 
 function toggleTf(tf, btn){
   if(!S.tfs)S.tfs=[];
@@ -4862,7 +4864,8 @@ function aiShowWelcome(){
     return;
   }
   document.getElementById('ai-quick').style.display='flex';
-  aiAddMsg('bot',`👋 你好！我是你的 AI 交易助手。\n\n我已經讀取了你目前 <strong>${(window.trades||[]).length} 筆</strong>交易紀錄，可以幫你分析：\n• 勝率與盈虧統計\n• 最佳交易時段\n• 幣種表現排名\n• 情緒與紀律分析\n\n你想了解哪方面？`);
+  const count=(typeof trades!=='undefined'?trades:window.trades||[]).length;
+  aiAddMsg('bot',`👋 你好！我是你的 AI 交易助手。\n\n我已經讀取了你目前 <strong>${count} 筆</strong>交易紀錄，可以幫你分析：\n• 勝率與盈虧統計\n• 最佳交易時段\n• 幣種表現排名\n• 情緒與紀律分析\n\n你想了解哪方面？`);
 }
 
 function aiAddMsg(role,text){
@@ -4896,7 +4899,7 @@ function aiRemoveTyping(){
 }
 
 function buildTradeContext(){
-  const ts=window.trades||[];
+  const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
   if(!ts.length)return'目前沒有任何交易紀錄。';
   // Summary stats
   const wins=ts.filter(t=>t.pnl>0).length;
