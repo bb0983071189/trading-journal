@@ -3852,11 +3852,15 @@ async function importExitFromExchange(exchangeOverride){
       // Also need fills-history to get open order fee
       const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
       const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=20&state=filled');
-      fills=(data?.data||[]).filter(o=>o.posSide)
-        .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
-      // 分群邏輯：同 posSide、時間差 <= 30分鐘視為同一倉位分批出場，合併為一筆
-      // 超過30分鐘視為獨立倉位，各自一筆讓用戶選
-      const OKX_GAP_MS = 30 * 60 * 1000;
+      // 只保留平倉單：做多(long)平倉 side=sell，做空(short)平倉 side=buy
+      fills=(data?.data||[]).filter(o=>{
+        if(!o.posSide)return false;
+        const side=(o.side||'').toLowerCase();
+        const posSide=(o.posSide||'').toLowerCase();
+        return (posSide==='long'&&side==='sell')||(posSide==='short'&&side==='buy');
+      }).sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
+      // 合併邏輯：同一 posSide 的所有平倉單視為同一張倉位的分批出場，全部合併
+      // 不限時間差，因為 TP1 後套保可能間隔數小時
       if(fills.length>1){
         const bySide={};
         fills.forEach(o=>{
@@ -3866,39 +3870,22 @@ async function importExitFromExchange(exchangeOverride){
         });
         fills=[];
         Object.values(bySide).forEach(group=>{
-          // group 已降序，反轉為升序處理
-          const asc=[...group].reverse();
-          let batches=[];
-          let cur=[asc[0]];
-          for(let i=1;i<asc.length;i++){
-            const prev=parseInt(asc[i-1].uTime||0);
-            const curr=parseInt(asc[i].uTime||0);
-            if(curr-prev<=OKX_GAP_MS){
-              cur.push(asc[i]);
-            }else{
-              batches.push(cur);
-              cur=[asc[i]];
-            }
-          }
-          batches.push(cur);
-          // 每個 batch 合併，按最新時間降序放入 fills
-          batches.reverse().forEach(batch=>{
-            const totalPnl=batch.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
-            const totalFee=batch.reduce((s,o)=>s+parseFloat(o.fee||0),0);
-            const latestTime=Math.max(...batch.map(o=>parseInt(o.uTime||0)));
-            const earliestTime=Math.min(...batch.map(o=>parseInt(o.uTime||0)));
-            // 使用最後一筆平倉的出場價（不用加權平均），因為用戶需要最終平倉價
-            const latestFill=batch.reduce((a,b)=>parseInt(a.uTime||0)>=parseInt(b.uTime||0)?a:b);
-            fills.push({
-              avgPx: parseFloat(latestFill.avgPx||0),
-              pnl: totalPnl,
-              fee: totalFee,
-              uTime: String(latestTime),
-              _openTime: earliestTime!==latestTime?earliestTime:0,
-              posSide: batch[0].posSide||'',
-              _merged: batch.length>1,
-              _mergedCount: batch.length
-            });
+          // 同 posSide 全部合併成一筆
+          const totalPnl=group.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
+          const totalFee=group.reduce((s,o)=>s+parseFloat(o.fee||0),0);
+          const latestTime=Math.max(...group.map(o=>parseInt(o.uTime||0)));
+          const earliestTime=Math.min(...group.map(o=>parseInt(o.uTime||0)));
+          // 使用最後一筆平倉的出場價（最終平倉價）
+          const latestFill=group.reduce((a,b)=>parseInt(a.uTime||0)>=parseInt(b.uTime||0)?a:b);
+          fills.push({
+            avgPx: parseFloat(latestFill.avgPx||0),
+            pnl: totalPnl,
+            fee: totalFee,
+            uTime: String(latestTime),
+            _openTime: earliestTime!==latestTime?earliestTime:0,
+            posSide: group[0].posSide||'',
+            _merged: group.length>1,
+            _mergedCount: group.length
           });
         });
       }
