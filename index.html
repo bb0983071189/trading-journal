@@ -3771,29 +3771,57 @@ async function importExitFromExchange(exchangeOverride){
           (o.reduceOnly===true||o.reduceOnly==='true')&&
           o.profit!==''&&o.profit!==undefined
         ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
-        // 合併分批出場：同 positionSide 全部加總為一筆（不限時間）
+        // 分群邏輯：同方向、時間差 <= 30分鐘的視為同一倉位分批出場，合併為一筆
+        // 超過30分鐘的視為獨立倉位，各自成一筆讓用戶選
+        const SAME_POS_GAP_MS = 30 * 60 * 1000; // 30 分鐘
         if(rawFills.length>1){
-          const side=rawFills[0].positionSide||rawFills[0].side;
-          const batch=rawFills.filter(o=>(o.positionSide||o.side)===side);
-          if(batch.length>1){
-            const totalQty=batch.reduce((s,o)=>s+parseFloat(o.executedQty||o.quantity||1),0);
-            const wAvgPrice=batch.reduce((s,o)=>s+parseFloat(o.avgPrice||o.price||0)*parseFloat(o.executedQty||o.quantity||1),0)/totalQty;
-            const totalProfit=batch.reduce((s,o)=>s+parseFloat(o.profit||0),0);
-            const totalComm=batch.reduce((s,o)=>s+Math.abs(parseFloat(o.commission||o.fee||0)),0);
-            fills=[{
-              avgPrice: wAvgPrice,
-              profit: totalProfit,
-              commission: totalComm,
-              updateTime: parseInt(rawFills[0].updateTime||Date.now()),
-              type: rawFills[0].type||'manual',
-              positionSide: side,
-              _fromBingX2: exchange==='BingX2',
-              _merged: true,
-              _mergedCount: batch.length
-            }];
-          } else {
-            fills=rawFills;
-          }
+          // 先按方向分組
+          const bySide={};
+          rawFills.forEach(o=>{
+            const side=(o.positionSide||o.side||'');
+            if(!bySide[side])bySide[side]=[];
+            bySide[side].push(o);
+          });
+          fills=[];
+          Object.values(bySide).forEach(group=>{
+            // group 已按 updateTime 降序排列；反轉成升序處理
+            const asc=[...group].reverse();
+            // 用時間窗口把連續的分批出場合併
+            let batches=[];
+            let cur=[asc[0]];
+            for(let i=1;i<asc.length;i++){
+              const prev=parseInt(asc[i-1].updateTime||0);
+              const curr=parseInt(asc[i].updateTime||0);
+              if(curr-prev<=SAME_POS_GAP_MS){
+                cur.push(asc[i]);
+              }else{
+                batches.push(cur);
+                cur=[asc[i]];
+              }
+            }
+            batches.push(cur);
+            // 每個 batch 合併為一筆，按最新時間降序放入 fills
+            batches.reverse().forEach(batch=>{
+              const totalQty=batch.reduce((s,o)=>s+parseFloat(o.executedQty||o.quantity||1),0);
+              const wAvgPrice=batch.reduce((s,o)=>s+parseFloat(o.avgPrice||o.price||0)*parseFloat(o.executedQty||o.quantity||1),0)/totalQty;
+              const totalProfit=batch.reduce((s,o)=>s+parseFloat(o.profit||0),0);
+              const totalComm=batch.reduce((s,o)=>s+Math.abs(parseFloat(o.commission||o.fee||0)),0);
+              const latestTime=Math.max(...batch.map(o=>parseInt(o.updateTime||0)));
+              const earliestTime=Math.min(...batch.map(o=>parseInt(o.updateTime||0)));
+              fills.push({
+                avgPrice: wAvgPrice,
+                profit: totalProfit,
+                commission: totalComm,
+                updateTime: latestTime,
+                _openTime: earliestTime!==latestTime?earliestTime:0,
+                type: batch[batch.length-1].type||'manual',
+                positionSide: batch[0].positionSide||batch[0].side||'',
+                _fromBingX2: exchange==='BingX2',
+                _merged: batch.length>1,
+                _mergedCount: batch.length
+              });
+            });
+          });
         } else {
           fills=rawFills;
         }
@@ -3808,28 +3836,53 @@ async function importExitFromExchange(exchangeOverride){
       const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=20&state=filled');
       fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
         .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
-      // 合併分批出場：同 posSide 的所有平倉單全部加總為一筆（不限時間）
+      // 分群邏輯：同 posSide、時間差 <= 30分鐘視為同一倉位分批出場，合併為一筆
+      // 超過30分鐘視為獨立倉位，各自一筆讓用戶選
+      const OKX_GAP_MS = 30 * 60 * 1000;
       if(fills.length>1){
-        const newestSide=fills[0].posSide;
-        const batch=fills.filter(o=>o.posSide===newestSide);
-        if(batch.length>1){
-          // 加權平均出場價（以 sz 成交量為權重，若無 sz 則等權）
-          const totalSz=batch.reduce((s,o)=>s+parseFloat(o.sz||1),0);
-          const wAvgPx=batch.reduce((s,o)=>s+parseFloat(o.avgPx||0)*parseFloat(o.sz||1),0)/totalSz;
-          const totalPnl=batch.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
-          const totalFee=batch.reduce((s,o)=>s+parseFloat(o.fee||0),0);
-          const merged={
-            avgPx: wAvgPx,
-            pnl: totalPnl,
-            fee: totalFee,
-            uTime: fills[0].uTime,
-            cTime: fills[0].cTime,
-            posSide: newestSide,
-            _merged: true,
-            _mergedCount: batch.length
-          };
-          fills=[merged];
-        }
+        const bySide={};
+        fills.forEach(o=>{
+          const side=o.posSide||'';
+          if(!bySide[side])bySide[side]=[];
+          bySide[side].push(o);
+        });
+        fills=[];
+        Object.values(bySide).forEach(group=>{
+          // group 已降序，反轉為升序處理
+          const asc=[...group].reverse();
+          let batches=[];
+          let cur=[asc[0]];
+          for(let i=1;i<asc.length;i++){
+            const prev=parseInt(asc[i-1].uTime||0);
+            const curr=parseInt(asc[i].uTime||0);
+            if(curr-prev<=OKX_GAP_MS){
+              cur.push(asc[i]);
+            }else{
+              batches.push(cur);
+              cur=[asc[i]];
+            }
+          }
+          batches.push(cur);
+          // 每個 batch 合併，按最新時間降序放入 fills
+          batches.reverse().forEach(batch=>{
+            const totalSz=batch.reduce((s,o)=>s+parseFloat(o.sz||1),0);
+            const wAvgPx=batch.reduce((s,o)=>s+parseFloat(o.avgPx||0)*parseFloat(o.sz||1),0)/totalSz;
+            const totalPnl=batch.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
+            const totalFee=batch.reduce((s,o)=>s+parseFloat(o.fee||0),0);
+            const latestTime=Math.max(...batch.map(o=>parseInt(o.uTime||0)));
+            const earliestTime=Math.min(...batch.map(o=>parseInt(o.uTime||0)));
+            fills.push({
+              avgPx: wAvgPx,
+              pnl: totalPnl,
+              fee: totalFee,
+              uTime: String(latestTime),
+              _openTime: earliestTime!==latestTime?earliestTime:0,
+              posSide: batch[0].posSide||'',
+              _merged: batch.length>1,
+              _mergedCount: batch.length
+            });
+          });
+        });
       }
     }
 
@@ -3861,13 +3914,8 @@ async function importExitFromExchange(exchangeOverride){
     } else if(fills.length===1){
       // 只有一筆，直接帶入
       applyExitFill(fills[0],exType);
-    } else if(exType==='BingX'&&fills[0]._fromPosHistory){
-      // BingX positionHistory 有多筆 → 不同時間的獨立倉位，讓用戶選
-      showExitFillSelector(fills,exType);
-    } else if(exchange==='OKX'&&fills[0]?._merged){
-      // OKX 合併後只剩一筆，直接帶入
-      applyExitFill(fills[0],exType);
     } else {
+      // 多筆（不同倉位）→ 讓用戶選
       showExitFillSelector(fills,exType);
     }
   }catch(e){
@@ -3891,9 +3939,9 @@ function showExitFillSelector(fills,exchange){
     const d=new Date(ts);
     const fmtTime=t=>{ const x=new Date(t); return x.toLocaleDateString('zh-TW',{month:'2-digit',day:'2-digit'})+' '+x.toTimeString().slice(0,5); };
 
-    // BingX positionHistory 有開倉時間
+    // 有開倉時間就顯示「開 → 平」區間
     let timeStr=fmtTime(ts);
-    if(o._fromPosHistory&&o._openTime){
+    if(o._openTime&&o._openTime>0){
       timeStr='開 '+fmtTime(parseInt(o._openTime))+' → 平 '+fmtTime(ts);
     }
 
