@@ -5167,13 +5167,14 @@ function aiReviewInit(){
   const current=sel.value;
   while(sel.options.length>1)sel.remove(1);
   const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
-  const sorted=[...ts].reverse();
-  sorted.forEach((t,i)=>{
+  // sorted uses original-index as value so find() works correctly
+  const sorted=[...ts].map((t,origIdx)=>({t,origIdx})).reverse();
+  sorted.forEach(({t,origIdx})=>{
     const pnlOf=v=>v.netPnl??v.pnl??0;
     const p=pnlOf(t);
     const label=`${t.date||''} ${t.symbol||t.sym||''} ${t.direction||t.dir||''} ${p>=0?'+':''}${p.toFixed(2)}U`;
     const opt=document.createElement('option');
-    opt.value=t.id||i;
+    opt.value=origIdx; // use original index for reliable lookup
     opt.textContent=label;
     sel.appendChild(opt);
   });
@@ -5193,7 +5194,8 @@ function aiReviewTradeChanged(){
     return;
   }
   const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
-  const t=ts.find(x=>(x.id||ts.indexOf(x)).toString()===sel.value);
+  // sel.value is the original index in ts
+  const t=ts[parseInt(sel.value)];
   if(!t){metaEl.style.display='none';return;}
   const pnlOf=v=>v.netPnl??v.pnl??0;
   const p=pnlOf(t);
@@ -5244,14 +5246,17 @@ function aiReviewTradeChanged(){
         });
     });
   }else{
-    document.getElementById('ai-img-drop-zone').textContent='📷 點擊或拖放圖表截圖至此';
+    document.getElementById('ai-img-drop-zone').textContent='📷 此交易無截圖紀錄，請手動上傳圖表';
   }
 
   // ── Auto-fill reason / notes ──
   const textEl=document.getElementById('ai-review-text');
   const parts=[];
-  if(t.reason)parts.push(`進場理由：${t.reason}`);
-  if(t.notes)parts.push(`複盤筆記：${t.notes}`);
+  const reasonVal=(t.reason||'').trim();
+  const notesVal=(t.notes||'').trim();
+  // Skip placeholder text from BingX auto-import
+  if(reasonVal && reasonVal!=='（從 BingX 自動匯入）')parts.push(`進場理由：${reasonVal}`);
+  if(notesVal)parts.push(`複盤筆記：${notesVal}`);
   textEl.value=parts.join('\n');
 }
 
@@ -5314,8 +5319,8 @@ async function aiSubmitReview(){
 
   // Build selected trade detail
   let tradeDetail='';
-  if(sel.value){
-    const t=ts.find(x=>(x.id||ts.indexOf(x)).toString()===sel.value);
+  if(sel.value!==''){
+    const t=ts[parseInt(sel.value)];
     if(t){
       const pnlOf=v=>v.netPnl??v.pnl??0;
       tradeDetail=`
