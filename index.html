@@ -4902,20 +4902,21 @@ function buildTradeContext(){
   const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
   if(!ts.length)return'目前沒有任何交易紀錄。';
   // Summary stats
-  const wins=ts.filter(t=>t.pnl>0).length;
-  const losses=ts.filter(t=>t.pnl<0).length;
+  const pnlOf=t=>t.netPnl??t.pnl??0; // netPnl is the stored field
+  const wins=ts.filter(t=>pnlOf(t)>0).length;
+  const losses=ts.filter(t=>pnlOf(t)<0).length;
   const total=ts.length;
-  const totalPnl=ts.reduce((s,t)=>s+(t.pnl||0),0);
-  const avgWin=wins?ts.filter(t=>t.pnl>0).reduce((s,t)=>s+t.pnl,0)/wins:0;
-  const avgLoss=losses?ts.filter(t=>t.pnl<0).reduce((s,t)=>s+t.pnl,0)/losses:0;
+  const totalPnl=ts.reduce((s,t)=>s+pnlOf(t),0);
+  const avgWin=wins?ts.filter(t=>pnlOf(t)>0).reduce((s,t)=>s+pnlOf(t),0)/wins:0;
+  const avgLoss=losses?ts.filter(t=>pnlOf(t)<0).reduce((s,t)=>s+pnlOf(t),0)/losses:0;
 
   // By symbol
   const symMap={};
   ts.forEach(t=>{
     const s=t.symbol||t.sym||'Unknown';
     if(!symMap[s])symMap[s]={n:0,wins:0,pnl:0};
-    symMap[s].n++;if(t.pnl>0)symMap[s].wins++;
-    symMap[s].pnl+=(t.pnl||0);
+    symMap[s].n++;if(pnlOf(t)>0)symMap[s].wins++;
+    symMap[s].pnl+=pnlOf(t);
   });
   const topSyms=Object.entries(symMap).sort((a,b)=>b[1].n-a[1].n).slice(0,8)
     .map(([s,v])=>`${s}: ${v.n}次 勝率${v.n?(v.wins/v.n*100).toFixed(0):0}% 盈虧${v.pnl>=0?'+':''}${v.pnl.toFixed(2)}U`).join('\n');
@@ -4926,8 +4927,8 @@ function buildTradeContext(){
     const h=t.entryTime?parseInt(t.entryTime.split(':')[0]):null;
     if(h===null)return;
     if(!hourMap[h])hourMap[h]={n:0,wins:0,pnl:0};
-    hourMap[h].n++;if(t.pnl>0)hourMap[h].wins++;
-    hourMap[h].pnl+=(t.pnl||0);
+    hourMap[h].n++;if(pnlOf(t)>0)hourMap[h].wins++;
+    hourMap[h].pnl+=pnlOf(t);
   });
   const hourStats=Object.entries(hourMap).sort((a,b)=>a[0]-b[0])
     .map(([h,v])=>`${h}時: ${v.n}次 勝率${(v.wins/v.n*100).toFixed(0)}% 盈虧${v.pnl>=0?'+':''}${v.pnl.toFixed(2)}U`).join('\n');
@@ -4937,8 +4938,8 @@ function buildTradeContext(){
   ts.forEach(t=>{
     const p=(t.exchange==='BingX'&&t.isOP)?'BingX(OP)':(t.exchange||'OKX');
     if(!platMap[p])platMap[p]={n:0,wins:0,pnl:0};
-    platMap[p].n++;if(t.pnl>0)platMap[p].wins++;
-    platMap[p].pnl+=(t.pnl||0);
+    platMap[p].n++;if(pnlOf(t)>0)platMap[p].wins++;
+    platMap[p].pnl+=pnlOf(t);
   });
   const platStats=Object.entries(platMap)
     .map(([p,v])=>`${p}: ${v.n}次 勝率${(v.wins/v.n*100).toFixed(0)}% 盈虧${v.pnl>=0?'+':''}${v.pnl.toFixed(2)}U`).join('\n');
@@ -4948,13 +4949,13 @@ function buildTradeContext(){
   ts.forEach(t=>{
     const e=t.emotion||'未記錄';
     if(!emoMap[e])emoMap[e]={n:0,wins:0};
-    emoMap[e].n++;if(t.pnl>0)emoMap[e].wins++;
+    emoMap[e].n++;if(pnlOf(t)>0)emoMap[e].wins++;
   });
   const emoStats=Object.entries(emoMap)
     .map(([e,v])=>`${e}: ${v.n}次 勝率${v.n?(v.wins/v.n*100).toFixed(0):0}%`).join('\n');
 
   // Recent 10 trades
-  const recent=ts.slice(-10).map(t=>`${t.date||''} ${t.symbol||t.sym||''} ${t.direction||''} 盈虧:${t.pnl>=0?'+':''}${(t.pnl||0).toFixed(2)}U`).join('\n');
+  const recent=ts.slice(-10).map(t=>`${t.date||''} ${t.symbol||t.sym||''} ${t.direction||t.dir||''} 盈虧:${pnlOf(t)>=0?'+':''}${pnlOf(t).toFixed(2)}U`).join('\n');
 
   return`=== 交易統計摘要 ===
 總筆數: ${total} | 勝: ${wins} | 敗: ${losses} | 勝率: ${total?(wins/total*100).toFixed(1):0}%
