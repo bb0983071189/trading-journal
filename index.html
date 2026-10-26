@@ -146,6 +146,12 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 .q-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:var(--rs);border:1px solid var(--border);margin-bottom:6px;background:var(--bg3);transition:all .15s}
 .q-item.yes{border-color:#fca5a5;background:#fff5f5}
 .q-item.no{border-color:#6ee7b7;background:#f0fdf4}
+@media(prefers-color-scheme:dark){
+  .q-item.yes{background:rgba(239,68,68,.10);border-color:#f87171}
+  .q-item.yes .q-text{color:var(--text)}
+  .q-item.no{background:rgba(16,185,129,.10);border-color:#6ee7b7}
+  .q-item.no .q-text{color:var(--text)}
+}
 .q-text{font-size:13px;color:var(--text);flex:1;line-height:1.5}
 .q-sub{font-size:10px;color:var(--text3);margin-top:2px}
 .yn-row{display:flex;gap:5px;flex-shrink:0;margin-top:2px}
@@ -343,7 +349,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 .badge-open{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #3b82f6;animation:blink-border 2s ease-in-out infinite}
 @keyframes blink-border{0%,100%{border-color:#3b82f6}50%{border-color:#60a5fa}}
 @media(prefers-color-scheme:dark){
-  .badge-open{background:#fff3cd;color:#856404;border-color:#ffc107}
+  .badge-open{background:rgba(255,193,7,.15);color:#fcd34d;border-color:#ffc107}
   @keyframes blink-border{0%,100%{border-color:#ffc107}50%{border-color:#fd7e14}}
 }
 .rec-item.open-pos{border-left:3px solid #3b82f6;background:linear-gradient(to right,rgba(59,130,246,.10),var(--bg))}
@@ -373,8 +379,9 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
 .sl-li-val{font-size:13px;font-weight:700;color:var(--text)}
 .sl-li-val.neg{color:var(--red)}
 @media(prefers-color-scheme:dark){
-  .sl-loss-item{background:rgba(0,0,0,.25)}
-  .sl-loss-item.hi{background:rgba(0,0,0,.35)}
+  .sl-loss-item{background:rgba(255,255,255,.07)}
+  .sl-loss-item.hi{background:rgba(255,255,255,.13);border-color:#f87171}
+  .sl-li-lbl{opacity:1;color:#f87171}
 }
 
 /* PLATFORM STRATEGY GROUPS */
