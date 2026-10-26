@@ -5184,7 +5184,14 @@ function aiReviewInit(){
 function aiReviewTradeChanged(){
   const sel=document.getElementById('ai-review-trade-sel');
   const metaEl=document.getElementById('ai-review-meta');
-  if(!sel.value){metaEl.style.display='none';return;}
+  if(!sel.value){
+    metaEl.style.display='none';
+    // Clear auto-filled fields
+    reviewImages=[];
+    aiRenderImgPreviews();
+    document.getElementById('ai-review-text').value='';
+    return;
+  }
   const ts=(typeof trades!=='undefined'&&trades.length)?trades:(window.trades||[]);
   const t=ts.find(x=>(x.id||ts.indexOf(x)).toString()===sel.value);
   if(!t){metaEl.style.display='none';return;}
@@ -5200,6 +5207,52 @@ function aiReviewTradeChanged(){
     <div class="ai-meta-item"><div class="ai-meta-key">淨盈虧</div><div class="ai-meta-val ${isPos?'pos':'neg'}">${isPos?'+':''}${p.toFixed(2)}U</div></div>
     <div class="ai-meta-item"><div class="ai-meta-key">情緒</div><div class="ai-meta-val">${t.emotion||'-'}</div></div>
   `;
+
+  // ── Auto-fill images from trade record ──
+  const allImgUrls=[...(t.images||[]),...(t.exitImages||[])].filter(u=>u&&u.startsWith('http'));
+  reviewImages=[];
+  aiRenderImgPreviews(); // clear first
+
+  if(allImgUrls.length){
+    const zone=document.getElementById('ai-img-drop-zone');
+    zone.textContent='⏳ 載入截圖中…';
+    zone.style.pointerEvents='none';
+    let loaded=0;
+    const toLoad=allImgUrls.slice(0,4);
+    toLoad.forEach(url=>{
+      // Fetch as blob → base64 (avoids CORS issues with direct img.src)
+      fetch(url)
+        .then(r=>r.blob())
+        .then(blob=>{
+          return new Promise(res=>{
+            const fr=new FileReader();
+            fr.onload=e=>res({dataUrl:e.target.result,mimeType:blob.type||'image/jpeg'});
+            fr.readAsDataURL(blob);
+          });
+        })
+        .then(img=>{
+          if(reviewImages.length<4)reviewImages.push(img);
+        })
+        .catch(()=>{}) // ignore individual fail
+        .finally(()=>{
+          loaded++;
+          if(loaded===toLoad.length){
+            zone.textContent='📷 點擊或拖放圖表截圖至此（已自動帶入，可新增或刪除）';
+            zone.style.pointerEvents='';
+            aiRenderImgPreviews();
+          }
+        });
+    });
+  }else{
+    document.getElementById('ai-img-drop-zone').textContent='📷 點擊或拖放圖表截圖至此';
+  }
+
+  // ── Auto-fill reason / notes ──
+  const textEl=document.getElementById('ai-review-text');
+  const parts=[];
+  if(t.reason)parts.push(`進場理由：${t.reason}`);
+  if(t.notes)parts.push(`複盤筆記：${t.notes}`);
+  textEl.value=parts.join('\n');
 }
 
 function aiHandleImgFiles(files){
