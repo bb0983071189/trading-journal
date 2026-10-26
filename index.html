@@ -3777,8 +3777,6 @@ async function importExitFromExchange(exchangeOverride){
       const posHist=await reqFn2('/openApi/swap/v2/trade/positionHistory?symbol='+t.symbol+'&limit=5');
       const posHistList=posHist?.data?.positionHistory||posHist?.data||[];
       if(posHistList.length>0){
-        // DEBUG: 印出第一筆原始資料，確認欄位名稱
-        console.log('[BingX posHistory] 第一筆原始資料:', JSON.stringify(posHistList[0], null, 2));
         // 將倉位歷史轉成 fill 格式，直接帶入已實現盈虧
         fills=posHistList.map(p=>({
           avgPrice: parseFloat(p.closePrice||p.avgClosePrice||0),
@@ -3797,10 +3795,9 @@ async function importExitFromExchange(exchangeOverride){
       }
       // Fallback: use allOrders if no position history
       if(!fills.length){
-        // DEBUG: 印出 positionHistory 原始回傳
-        console.log('[BingX posHistory] 原始回傳:', JSON.stringify(posHist, null, 2));
-        const data=await reqFn2('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=20');
-        console.log('[BingX allOrders] 原始回傳前3筆:', JSON.stringify((data?.data?.orders||[]).slice(0,3), null, 2));
+        // 查最近7天，避免 limit=20 被舊單填滿
+        const startTs=Date.now()-7*24*60*60*1000;
+        const data=await reqFn2('/openApi/swap/v2/trade/allOrders?symbol='+t.symbol+'&limit=100&startTime='+startTs);
         const orders=data?.data?.orders||[];
         const rawFills=orders.filter(o=>
           o.status==='FILLED'&&
