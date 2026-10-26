@@ -498,13 +498,29 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       </div>
     </div>
             <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-          <div style="font-size:12px;font-weight:600;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Worker URL <span style="font-weight:400;color:#c0c0c0">（CORS 代理，部署 Cloudflare Worker 後填入）</span></div>
+          <div style="font-size:12px;font-weight:600;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Worker URL <span style="font-weight:400;color:#c0c0c0">（CORS 代理，同時用於交易所同步 + AI 助手）</span></div>
           <input type="text" id="worker-url-input" placeholder="https://your-worker.your-name.workers.dev" value="" oninput="saveWorkerUrl()" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;background:var(--bg2);color:var(--text)">
         </div>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
           <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">🤖 AI 助手 — Claude API Key</div>
           <input type="password" id="claude-api-key" placeholder="sk-ant-..." oninput="saveClaudeKey()" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;background:var(--bg2);color:var(--text)">
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">填入後即可在右下角 🤖 按鈕與 AI 助手對話，分析你的交易數據</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">填入 API Key 後，AI 助手會透過上方的 <strong>Worker URL</strong> 轉發請求（必填，避免瀏覽器 CORS 限制）</div>
+          <div style="margin-top:8px;padding:10px;background:var(--bg4);border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">📋 Worker 需加入 /ai 路由（貼到 Cloudflare Worker 代碼中）：</div>
+            <pre id="worker-ai-snippet" style="font-size:10px;color:var(--text2);white-space:pre-wrap;margin:0;line-height:1.5;font-family:monospace">if(url.pathname==='/ai'){
+  const body=await request.json();
+  const key=request.headers.get('x-worker-auth')||body['x-claude-key']||'';
+  delete body['x-claude-key'];
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+    body:JSON.stringify(body)
+  });
+  const d=await r.json();
+  return new Response(JSON.stringify(d),{headers:{...corsHeaders,'Content-Type':'application/json'}});
+}</pre>
+            <button onclick="copyWorkerSnippet()" style="margin-top:6px;font-size:10px;padding:3px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer">複製代碼</button>
+          </div>
         </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="fetchBingXHistory()" style="font-size:12px">📋 BingX 歷史成交</button>
@@ -4799,6 +4815,18 @@ if(window._fbReady){
 let aiPanelOpen=false;
 let aiHistory=[];
 
+function copyWorkerSnippet(){
+  const el=document.getElementById('worker-ai-snippet');
+  if(!el)return;
+  navigator.clipboard.writeText(el.textContent).then(()=>{
+    setApiStatus('Worker 代碼已複製！','var(--green)');
+  }).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=el.textContent;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    setApiStatus('Worker 代碼已複製！','var(--green)');
+  });
+}
 function saveClaudeKey(){
   const k=document.getElementById('claude-api-key')?.value||'';
   try{localStorage.setItem('claude_api_key',k);}catch(e){}
@@ -4983,22 +5011,24 @@ async function aiSend(){
 ${buildTradeContext()}`;
 
   try{
-    const messages=aiHistory.slice(-8); // keep last 8 for context
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':key,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-calls':'true'
-      },
-      body:JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:600,
-        system:systemPrompt,
-        messages:messages
-      })
-    });
+    const messages=aiHistory.slice(-8);
+    const workerUrl=(localStorage.getItem('worker_url')||'').replace(/\/$/,'');
+    // Route through Worker if available (avoids CORS), otherwise try direct
+    const endpoint=workerUrl
+      ? `${workerUrl}/ai`
+      : 'https://api.anthropic.com/v1/messages';
+    const headers={'Content-Type':'application/json'};
+    if(workerUrl){
+      // Worker receives key in body and forwards to Anthropic server-side
+      headers['x-worker-auth']=key;
+    }else{
+      headers['x-api-key']=key;
+      headers['anthropic-version']='2023-06-01';
+      headers['anthropic-dangerous-direct-browser-calls']='true';
+    }
+    const body={model:'claude-haiku-4-5-20251001',max_tokens:600,system:systemPrompt,messages};
+    if(workerUrl) body['x-claude-key']=key;
+    const resp=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)});
     aiRemoveTyping();
     if(!resp.ok){
       const err=await resp.json().catch(()=>({}));
@@ -5014,7 +5044,12 @@ ${buildTradeContext()}`;
     }
   }catch(err){
     aiRemoveTyping();
-    aiAddMsg('bot',`❌ 連線錯誤：${err.message}\n\n請確認網路連線正常，或 API Key 有效。`);
+    const workerSet=!!(localStorage.getItem('worker_url')||'').trim();
+    if(!workerSet){
+      aiAddMsg('bot',`❌ 瀏覽器 CORS 限制，無法直接呼叫 API。\n\n請在 <strong>API 設定 → Worker URL</strong> 填入你的 Cloudflare Worker 網址，AI 助手會透過它來轉發請求。\n\n<a href="https://gist.github.com/" target="_blank" style="color:var(--accent)">Worker 部署說明請見下方</a>`);
+    }else{
+      aiAddMsg('bot',`❌ 連線錯誤：${err.message}\n\n請確認 Worker URL 正確，且 Worker 已部署。`);
+    }
     aiHistory.pop();
   }finally{
     document.getElementById('ai-send-btn').disabled=false;
