@@ -3693,6 +3693,11 @@ function saveWorkerUrl(){
   localStorage.setItem('worker_url',url);
   // Update WORKER_URL runtime value so fetches use new value immediately
   window._workerUrl=url;
+  // 同步到 Firebase
+  if(window._fb&&window._fbReady){
+    const{setDoc,doc,db}=window._fb;
+    setDoc(doc(db,'settings','main'),{worker_url:url},{merge:true}).catch(e=>console.warn('Worker URL sync failed',e));
+  }
 }
 
 function loadApiKeys(){
@@ -5004,7 +5009,7 @@ function loadClaudeKey(){
 function getClaudeKey(){
   return document.getElementById('claude-api-key')?.value||localStorage.getItem('claude_api_key')||'';
 }
-async function syncClaudeKeyFromFirebase(){
+async function syncSettingsFromFirebase(){
   if(!window._fb||!window._fbReady)return;
   try{
     const{doc,db}=window._fb;
@@ -5012,14 +5017,24 @@ async function syncClaudeKeyFromFirebase(){
     const snap=await getDoc(doc(db,'settings','main'));
     if(snap.exists()){
       const data=snap.data();
+      // 同步 Claude API Key
       if(data.claude_api_key){
         localStorage.setItem('claude_api_key',data.claude_api_key);
         const el=document.getElementById('claude-api-key');
         if(el&&!el.value)el.value=data.claude_api_key;
       }
+      // 同步 Worker URL
+      if(data.worker_url){
+        localStorage.setItem('worker_url',data.worker_url);
+        window._workerUrl=data.worker_url;
+        const el=document.getElementById('worker-url-input');
+        if(el&&!el.value)el.value=data.worker_url;
+      }
     }
-  }catch(e){console.warn('Claude key fetch failed',e);}
+  }catch(e){console.warn('Settings sync failed',e);}
 }
+// 保留舊名稱相容性
+const syncClaudeKeyFromFirebase=syncSettingsFromFirebase;
 
 function toggleAiPanel(){
   aiPanelOpen=!aiPanelOpen;
@@ -5618,7 +5633,7 @@ async function aiAskFollowUp(){
 }
 
 // Load Claude key on init
-document.addEventListener('DOMContentLoaded',()=>{ loadClaudeKey(); setTimeout(syncClaudeKeyFromFirebase,2000); });
+document.addEventListener('DOMContentLoaded',()=>{ loadClaudeKey(); setTimeout(syncSettingsFromFirebase,2000); });
 setTimeout(loadClaudeKey, 500);
 </script>
 </body>
