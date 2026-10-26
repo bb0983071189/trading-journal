@@ -770,6 +770,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
             <option value="tp1">止盈 TP1</option>
             <option value="tp2">止盈 TP2</option>
             <option value="tp3">止盈 TP3</option>
+            <option value="tp1hedge">TP1後套保</option>
+            <option value="tp2hedge">TP2後套保</option>
             <option value="be">平保（保本出場）</option>
             <option value="sl">止損 SL</option>
             <option value="liq">強制平倉</option>
@@ -1041,6 +1043,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
           <option value="tp1">止盈 TP1</option>
           <option value="tp2">止盈 TP2</option>
           <option value="tp3">止盈 TP3</option>
+          <option value="tp1hedge">TP1後套保</option>
+          <option value="tp2hedge">TP2後套保</option>
           <option value="be">平保</option>
           <option value="sl">止損 SL</option>
           <option value="liq">強制平倉</option>
@@ -1149,6 +1153,8 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
           <option value="tp1">止盈 TP1</option>
           <option value="tp2">止盈 TP2</option>
           <option value="tp3">止盈 TP3</option>
+          <option value="tp1hedge">TP1後套保</option>
+          <option value="tp2hedge">TP2後套保</option>
           <option value="be">平保</option>
           <option value="sl">止損 SL</option>
           <option value="liq">強制平倉</option>
@@ -2022,7 +2028,7 @@ function saveEdit(){
   if(!editingId)return;
   const idx=trades.findIndex(x=>x.id===editingId);
   if(idx<0)return;
-  const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
+  const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',tp1hedge:'TP1後套保',tp2hedge:'TP2後套保',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
   const get=id=>document.getElementById(id)?.value||'';
   const getN=id=>parseFloat(document.getElementById(id)?.value)||0;
   const xr=get('e-exitreason');
@@ -2212,7 +2218,7 @@ function saveExitData(){
   const t=trades[idx];
   const exit=parseFloat(document.getElementById('ex-exit').value)||0;
   const xr=document.getElementById('ex-xr').value;
-  const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
+  const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',tp1hedge:'TP1後套保',tp2hedge:'TP2後套保',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
 
   // Use imported PnL from exchange if available, otherwise calculate
   let cp=1;
@@ -2305,7 +2311,7 @@ function genReport(){
 // ===== SAVE TRADE =====
 function saveTrade(){
   const gradeMap=['D','D','D','D','C','C','B','A','A','S','S'];
-  const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
+  const xrMap={tp1:'止盈 TP1',tp2:'止盈 TP2',tp3:'止盈 TP3',tp1hedge:'TP1後套保',tp2hedge:'TP2後套保',be:'平保',sl:'止損 SL',liq:'強制平倉',manual:'手動出場'};
   const t={
     id:Date.now(),date:gv('p1-date')||new Date().toISOString().slice(0,10),
     etime:gv('p1-etime'),xtime:gv('p2-xtime'),
@@ -3846,7 +3852,7 @@ async function importExitFromExchange(exchangeOverride){
       // Also need fills-history to get open order fee
       const instId=t.symbol.includes('-SWAP')?t.symbol:t.symbol+'-SWAP';
       const data=await okxRequest('/api/v5/trade/orders-history?instType=SWAP&instId='+instId+'&limit=20&state=filled');
-      fills=(data?.data||[]).filter(o=>o.posSide&&parseFloat(o.pnl||0)!==0)
+      fills=(data?.data||[]).filter(o=>o.posSide)
         .sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
       // 分群邏輯：同 posSide、時間差 <= 30分鐘視為同一倉位分批出場，合併為一筆
       // 超過30分鐘視為獨立倉位，各自一筆讓用戶選
@@ -3877,14 +3883,14 @@ async function importExitFromExchange(exchangeOverride){
           batches.push(cur);
           // 每個 batch 合併，按最新時間降序放入 fills
           batches.reverse().forEach(batch=>{
-            const totalSz=batch.reduce((s,o)=>s+parseFloat(o.sz||1),0);
-            const wAvgPx=batch.reduce((s,o)=>s+parseFloat(o.avgPx||0)*parseFloat(o.sz||1),0)/totalSz;
             const totalPnl=batch.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
             const totalFee=batch.reduce((s,o)=>s+parseFloat(o.fee||0),0);
             const latestTime=Math.max(...batch.map(o=>parseInt(o.uTime||0)));
             const earliestTime=Math.min(...batch.map(o=>parseInt(o.uTime||0)));
+            // 使用最後一筆平倉的出場價（不用加權平均），因為用戶需要最終平倉價
+            const latestFill=batch.reduce((a,b)=>parseInt(a.uTime||0)>=parseInt(b.uTime||0)?a:b);
             fills.push({
-              avgPx: wAvgPx,
+              avgPx: parseFloat(latestFill.avgPx||0),
               pnl: totalPnl,
               fee: totalFee,
               uTime: String(latestTime),
