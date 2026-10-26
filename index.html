@@ -4989,6 +4989,11 @@ function copyWorkerSnippet(){
 function saveClaudeKey(){
   const k=document.getElementById('claude-api-key')?.value||'';
   try{localStorage.setItem('claude_api_key',k);}catch(e){}
+  // 同步到 Firebase
+  if(window._fb&&window._fbReady){
+    const{setDoc,doc,db}=window._fb;
+    setDoc(doc(db,'settings','main'),{claude_api_key:k},{merge:true}).catch(e=>console.warn('Claude key sync failed',e));
+  }
 }
 function loadClaudeKey(){
   const k=localStorage.getItem('claude_api_key')||'';
@@ -4998,6 +5003,22 @@ function loadClaudeKey(){
 }
 function getClaudeKey(){
   return document.getElementById('claude-api-key')?.value||localStorage.getItem('claude_api_key')||'';
+}
+async function syncClaudeKeyFromFirebase(){
+  if(!window._fb||!window._fbReady)return;
+  try{
+    const{doc,db}=window._fb;
+    const{getDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap=await getDoc(doc(db,'settings','main'));
+    if(snap.exists()){
+      const data=snap.data();
+      if(data.claude_api_key){
+        localStorage.setItem('claude_api_key',data.claude_api_key);
+        const el=document.getElementById('claude-api-key');
+        if(el&&!el.value)el.value=data.claude_api_key;
+      }
+    }
+  }catch(e){console.warn('Claude key fetch failed',e);}
 }
 
 function toggleAiPanel(){
@@ -5597,7 +5618,7 @@ async function aiAskFollowUp(){
 }
 
 // Load Claude key on init
-document.addEventListener('DOMContentLoaded',()=>{ loadClaudeKey(); });
+document.addEventListener('DOMContentLoaded',()=>{ loadClaudeKey(); setTimeout(syncClaudeKeyFromFirebase,2000); });
 setTimeout(loadClaudeKey, 500);
 </script>
 </body>
