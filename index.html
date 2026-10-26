@@ -3802,29 +3802,28 @@ async function importExitFromExchange(exchangeOverride){
           (o.reduceOnly===true||o.reduceOnly==='true')&&
           o.profit!==''&&o.profit!==undefined
         ).sort((a,b)=>parseInt(b.updateTime||0)-parseInt(a.updateTime||0));
-        // 合併邏輯：同 side 的所有平倉單視為同一張倉位，全部合併，不限時間差
-        if(rawFills.length>1){
-          // 先按方向分組
-          const bySide={};
+        // 合併邏輯：用 positionID 分組（同一張倉位的分批平倉），沒有 positionID 則用 side+時間差30分鐘
+        if(rawFills.length>0){
+          const byPos={};
           rawFills.forEach(o=>{
-            const side=(o.positionSide||o.side||'');
-            if(!bySide[side])bySide[side]=[];
-            bySide[side].push(o);
+            const pid=o.positionID?String(o.positionID):(o.positionSide||o.side||'unknown');
+            if(!byPos[pid])byPos[pid]=[];
+            byPos[pid].push(o);
           });
           fills=[];
-          Object.values(bySide).forEach(group=>{
-            // 同 side 全合併為一筆，使用最後一筆的出場價
+          Object.values(byPos).forEach(group=>{
             const totalProfit=group.reduce((s,o)=>s+parseFloat(o.profit||0),0);
             const totalComm=group.reduce((s,o)=>s+Math.abs(parseFloat(o.commission||o.fee||0)),0);
             const latestTime=Math.max(...group.map(o=>parseInt(o.updateTime||0)));
-            const earliestTime=Math.min(...group.map(o=>parseInt(o.updateTime||0)));
+            // allOrders 無法得知真實開倉時間，設為 0（由 positionHistory 補充，或不顯示）
+            const openTime=0;
             const latestFill=group.reduce((a,b)=>parseInt(a.updateTime||0)>=parseInt(b.updateTime||0)?a:b);
             fills.push({
               avgPrice: parseFloat(latestFill.avgPrice||latestFill.price||0),
               profit: totalProfit,
               commission: totalComm,
               updateTime: latestTime,
-              _openTime: earliestTime!==latestTime?earliestTime:0,
+              _openTime: openTime,
               type: latestFill.type||'manual',
               positionSide: group[0].positionSide||group[0].side||'',
               _fromBingX2: exchange==='BingX2',
