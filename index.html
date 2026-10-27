@@ -3851,37 +3851,50 @@ async function importExitFromExchange(exchangeOverride){
         const posSide=(o.posSide||'').toLowerCase();
         return (posSide==='long'&&side==='sell')||(posSide==='short'&&side==='buy');
       }).sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
-      // 合併邏輯：找最新平倉單，把同方向且時間差在12小時內的填單合併為同一倉位
+      // 合併邏輯：用 app 記錄的開倉時間為基準，只取「平倉時間 >= 開倉時間」的平倉單合併
+      // 這樣不同時間的歷史倉位就不會被混入
       if(okxRaw.length>0){
-        const GAP=12*60*60*1000; // 12小時
-        // 先按方向分組
+        // 把 t.date + t.etime 合成開倉 timestamp（台灣時間 UTC+8）
+        let entryTs=0;
+        if(t.date&&t.etime){
+          const dateStr=t.date; // "2026-10-27"
+          const timeStr=t.etime; // "20:18" 或 "20:18:43"
+          const timeParts=timeStr.split(':');
+          const hh=parseInt(timeParts[0]||0);
+          const mm=parseInt(timeParts[1]||0);
+          const ss=parseInt(timeParts[2]||0);
+          // 建立台灣時間的 Date（UTC+8 = -480 分鐘偏移）
+          const d=new Date(dateStr+'T'+String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0')+'+08:00');
+          entryTs=d.getTime();
+        }
+        // 先按方向分組，再過濾出屬於本倉位的平倉單（平倉時間 >= 開倉時間）
         const bySide={};
         okxRaw.forEach(o=>{
           const side=o.posSide||'';
+          const oTime=parseInt(o.uTime||0);
+          // 若有開倉時間，只取平倉時間 >= 開倉時間的單子
+          if(entryTs>0&&oTime<entryTs)return;
           if(!bySide[side])bySide[side]=[];
           bySide[side].push(o);
         });
         fills=[];
         Object.entries(bySide).forEach(([side,orders])=>{
-          // 依時間降序排，取最新那筆作為本倉位的錨點
+          if(!orders.length)return;
           orders.sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
-          const anchor=orders[0];
-          const anchorTime=parseInt(anchor.uTime||0);
-          // 把與最新一筆時間差在GAP內的同方向單視為同一倉位
-          const group=orders.filter(o=>anchorTime-parseInt(o.uTime||0)<=GAP);
-          const totalPnl=group.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
-          const totalFee=group.reduce((s,o)=>s+parseFloat(o.fee||0),0);
-          const latestTime=Math.max(...group.map(o=>parseInt(o.uTime||0)));
-          const earliestTime=Math.min(...group.map(o=>parseInt(o.uTime||0)));
+          const anchor=orders[0]; // 最新平倉單（用其出場均價）
+          const totalPnl=orders.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
+          const totalFee=orders.reduce((s,o)=>s+parseFloat(o.fee||0),0);
+          const latestTime=Math.max(...orders.map(o=>parseInt(o.uTime||0)));
+          const earliestTime=Math.min(...orders.map(o=>parseInt(o.uTime||0)));
           fills.push({
             avgPx: parseFloat(anchor.avgPx||0),
             pnl: totalPnl,
             fee: totalFee,
             uTime: String(latestTime),
-            _openTime: earliestTime!==latestTime?earliestTime:0,
+            _openTime: entryTs>0?entryTs:(earliestTime!==latestTime?earliestTime:0),
             posSide: side,
-            _merged: group.length>1,
-            _mergedCount: group.length
+            _merged: orders.length>1,
+            _mergedCount: orders.length
           });
         });
       } else {
