@@ -3851,8 +3851,10 @@ async function importExitFromExchange(exchangeOverride){
         const posSide=(o.posSide||'').toLowerCase();
         return (posSide==='long'&&side==='sell')||(posSide==='short'&&side==='buy');
       }).sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
-      // 合併邏輯：同 posSide 的所有平倉單視為同一張倉位，全部合併，不限時間差
+      // 合併邏輯：找最新平倉單，把同方向且時間差在12小時內的填單合併為同一倉位
       if(okxRaw.length>0){
+        const GAP=12*60*60*1000; // 12小時
+        // 先按方向分組
         const bySide={};
         okxRaw.forEach(o=>{
           const side=o.posSide||'';
@@ -3860,19 +3862,24 @@ async function importExitFromExchange(exchangeOverride){
           bySide[side].push(o);
         });
         fills=[];
-        Object.values(bySide).forEach(group=>{
+        Object.entries(bySide).forEach(([side,orders])=>{
+          // 依時間降序排，取最新那筆作為本倉位的錨點
+          orders.sort((a,b)=>parseInt(b.uTime||0)-parseInt(a.uTime||0));
+          const anchor=orders[0];
+          const anchorTime=parseInt(anchor.uTime||0);
+          // 把與最新一筆時間差在GAP內的同方向單視為同一倉位
+          const group=orders.filter(o=>anchorTime-parseInt(o.uTime||0)<=GAP);
           const totalPnl=group.reduce((s,o)=>s+parseFloat(o.pnl||0),0);
           const totalFee=group.reduce((s,o)=>s+parseFloat(o.fee||0),0);
           const latestTime=Math.max(...group.map(o=>parseInt(o.uTime||0)));
           const earliestTime=Math.min(...group.map(o=>parseInt(o.uTime||0)));
-          const latestFill=group.reduce((a,b)=>parseInt(a.uTime||0)>=parseInt(b.uTime||0)?a:b);
           fills.push({
-            avgPx: parseFloat(latestFill.avgPx||0),
+            avgPx: parseFloat(anchor.avgPx||0),
             pnl: totalPnl,
             fee: totalFee,
             uTime: String(latestTime),
             _openTime: earliestTime!==latestTime?earliestTime:0,
-            posSide: group[0].posSide||'',
+            posSide: side,
             _merged: group.length>1,
             _mergedCount: group.length
           });
