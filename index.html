@@ -5437,8 +5437,9 @@ async function aiSubmitReview(){
 === 本次復盤交易 ===
 日期: ${t.date||'-'} | 時間: ${t.entryTime||'-'}
 幣種: ${t.symbol||t.sym||'-'} | 方向: ${t.direction||t.dir||'-'}
-進場價: ${t.entryPrice||'-'} | 出場價: ${t.exitPrice||'-'}
-槓桿: ${t.leverage||'-'}x | 手數: ${t.contracts||t.quantity||'-'}
+進場價: ${t.entry||t.entryPrice||'-'} | 出場價: ${t.exit||t.exitPrice||'-'}
+止損(SL): ${t.sl||'-'} | 止盈 TP1: ${t.tp1||'-'}${t.tp2?` | TP2: ${t.tp2}`:''}${t.tp3?` | TP3: ${t.tp3}`:''}
+槓桿: ${t.lev||t.leverage||'-'}x | 保證金: ${t.margin||'-'}U
 淨盈虧: ${pnlOf(t)>=0?'+':''}${pnlOf(t).toFixed(2)}U | 手續費: ${t.fees||t.fee||0}U
 情緒狀態: ${t.emotion||'-'}
 交易理由: ${t.reason||t.note||'-'}
