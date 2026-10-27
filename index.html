@@ -5536,7 +5536,7 @@ ${tradeDetail}`;
     const headers={'Content-Type':'application/json'};
     if(workerUrl){headers['x-worker-auth']=key;}
     else{headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';headers['anthropic-dangerous-direct-browser-calls']='true';}
-    const body={model:'claude-haiku-4-5-20251001',max_tokens:1200,system:systemPrompt,
+    const body={model:'claude-haiku-4-5-20251001',max_tokens:4000,system:systemPrompt,
       messages:[{role:'user',content:contentParts}]};
     if(workerUrl)body['x-claude-key']=key;
 
