@@ -439,6 +439,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
   <button class="nav-tab on" onclick="showPage('entry')">交易</button>
   <button class="nav-tab" onclick="showPage('records')">紀錄 <span class="nav-count" id="nav-count">0</span></button>
   <button class="nav-tab" onclick="showPage('report')">分析</button>
+  <button class="nav-tab" onclick="showPage('ftmo')" style="color:#d97706;font-weight:600">FTMO <span style="font-size:9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:999px;padding:1px 5px;color:#d97706;margin-left:2px">外匯</span> <span class="nav-count" id="ftmo-nav-count" style="background:#fffbeb;color:#d97706">0</span></button>
   <div class="sync-bar offline" id="sync-bar">
     <span class="sync-dot" id="sync-dot"></span>
     <span id="sync-txt">載入中…</span>
@@ -885,6 +886,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
     <button class="plat-tab" onclick="setRepPlat(this,'OKX')">OKX</button>
     <button class="plat-tab" onclick="setRepPlat(this,'BingX')">BingX</button>
     <button class="plat-tab" onclick="setRepPlat(this,'BingX2')">BingX (OP)</button>
+    <button class="plat-tab" onclick="setRepPlat(this,'FTMO')">FTMO</button>
   </div>
   <div class="rec-filters" id="rep-time-filters">
     <button class="fc on" onclick="setRF(this,'all')">全部</button>
@@ -973,11 +975,12 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
       <button class="cal-modal-close" onclick="closeCalModal()">×</button>
     </div>
     <!-- Platform filter -->
-    <div class="plat-tabs" style="margin-bottom:14px">
+    <div class="plat-tabs" style="margin-bottom:8px">
       <button class="plat-tab on" onclick="setCalPlat(this,'all')">全部</button>
       <button class="plat-tab" onclick="setCalPlat(this,'OKX')">OKX</button>
       <button class="plat-tab" onclick="setCalPlat(this,'BingX')">BingX</button>
       <button class="plat-tab" onclick="setCalPlat(this,'BingX2')">BingX (OP)</button>
+      <button class="plat-tab" onclick="setCalPlat(this,'FTMO')">FTMO</button>
     </div>
     <div class="pnl-cal-card" style="margin-bottom:0">
       <div class="pnl-cal-header">
@@ -992,6 +995,7 @@ body{background:var(--bg3);color:var(--text);font-family:-apple-system,BlinkMacS
         <span><span class="leg-dot" style="background:#2563eb"></span>OKX</span>
         <span><span class="leg-dot" style="background:#059669"></span>BingX</span>
         <span><span class="leg-dot" style="background:#d97706"></span>BingX (OP)</span>
+        <span><span class="leg-dot" style="background:#7c3aed"></span>FTMO</span>
       </div>
       <div class="pnl-cal-grid" id="pnl-cal-page-grid"></div>
       <div class="pnl-cal-summary" id="cal-page-summary"></div>
@@ -1259,6 +1263,13 @@ const STRAT_DEFS = {
     {key:'SMF策略',      s2:'Smart Money Flow'},
     {key:'其他技術分析', s2:'不在上述分類'},
     {key:'美盤策略',     s2:'美盤時段交易策略'},
+  ],
+  FTMO: [
+    {key:'短黃金策略',   s2:'黃金空單策略'},
+    {key:'SMC',          s2:'聰明錢概念'},
+    {key:'傳統技術分析', s2:'均線、型態、支撐壓力'},
+    {key:'剝頭皮策略',   s2:'短線快進快出'},
+    {key:'其他技術分析', s2:'不在上述分類'},
   ],
 };
 
@@ -2390,6 +2401,19 @@ function resetForm(){
 }
 
 // ===== RECORDS =====
+// Win/Loss by exit reason: tp1/tp2/tp3=win, sl=loss, others by pnl
+function isWin(t){
+  const xr=(t.exitReason||t.exitReasonLabel||'').toLowerCase();
+  if(/^tp[123]$/.test(xr)||/tp[123]後套保/.test(xr)||/止盈/.test(xr)||xr==='tp1hedge'||xr==='tp2hedge')return true;
+  if(xr==='sl'||/止損/.test(xr)||xr==='liq'||/強平/.test(xr))return false;
+  return (t.netPnl||0)>0;
+}
+function isLoss(t){
+  const xr=(t.exitReason||t.exitReasonLabel||'').toLowerCase();
+  if(xr==='sl'||/止損/.test(xr)||xr==='liq'||/強平/.test(xr))return true;
+  if(/^tp[123]$/.test(xr)||/tp[123]後套保/.test(xr)||/止盈/.test(xr)||xr==='tp1hedge'||xr==='tp2hedge')return false;
+  return (t.netPnl||0)<0;
+}
 function filterT(list,f,plat){
   const now=Date.now();
   let result=list;
@@ -2400,8 +2424,8 @@ function filterT(list,f,plat){
   }
   if(f==='7d')return result.filter(t=>now-new Date(t.date).getTime()<7*864e5);
   if(f==='30d')return result.filter(t=>now-new Date(t.date).getTime()<30*864e5);
-  if(f==='win')return result.filter(t=>t.netPnl>0);
-  if(f==='loss')return result.filter(t=>t.netPnl<=0);
+  if(f==='win')return result.filter(t=>isWin(t));
+  if(f==='loss')return result.filter(t=>isLoss(t));
   return result;
 }
 function setF(btn,val){document.querySelectorAll('#page-records .fc').forEach(b=>b.classList.remove('on'));btn.classList.add('on');recF=val;renderRec();}
@@ -2485,7 +2509,7 @@ function closeModal(){document.getElementById('detail-modal').classList.remove('
 function deleteTrade(id){if(!confirm('確定刪除？'))return;trades=trades.filter(t=>t.id!==id);saveLS();fbDeleteTrade(id);renderRec();closeModal();}
 
 // ===== STRATEGY FILTER (PLATFORM-GROUPED) =====
-let sfActivePlatStrat = { OKX: new Set(['all']), BingX: new Set(['all']), BingX2: new Set(['all']) };
+let sfActivePlatStrat = { OKX: new Set(['all']), BingX: new Set(['all']), BingX2: new Set(['all']), FTMO: new Set(['all']) };
 
 function toggleSF(btn, val, plat){
   if(!plat){ // legacy "all" button
@@ -2522,8 +2546,9 @@ function buildStratFilterBody(baseList){
   const body=document.getElementById('strat-filter-body');
   if(!body)return;
   const platforms=[
-    {key:'OKX',   cls:'okx',   label:'OKX',   strats:STRAT_DEFS.OKX},
-    {key:'BingX', cls:'bingx', label:'BingX',  strats:STRAT_DEFS.BingX},
+    {key:'OKX',   cls:'okx',   label:'OKX',      strats:STRAT_DEFS.OKX},
+    {key:'BingX', cls:'bingx', label:'BingX',     strats:STRAT_DEFS.BingX},
+    {key:'FTMO',  cls:'ftmo',  label:'FTMO',      strats:STRAT_DEFS.FTMO},
   ];
   // Determine which platforms have trades in baseList
   const activePlats=new Set(baseList.map(t=>t.exchange));
@@ -2540,7 +2565,7 @@ function buildStratFilterBody(baseList){
       }).join('');
     // Mini stats for this platform (all strategies)
     const platTrades=baseList.filter(t=>t.exchange===p.key);
-    const ptWins=platTrades.filter(t=>t.netPnl>0).length;
+    const ptWins=platTrades.filter(t=>isWin(t)).length;
     const ptTotal=platTrades.reduce((a,t)=>a+(t.netPnl||0),0);
     const ptWR=platTrades.length?Math.round(ptWins/platTrades.length*100):0;
     return`<div class="plat-strat-group">
@@ -2559,7 +2584,7 @@ function renderStratFilter(baseList){
     if(sfChart){sfChart.destroy();sfChart=null;}
     return;
   }
-  const wins=list.filter(t=>t.netPnl>0).length;
+  const wins=list.filter(t=>isWin(t)).length;
   const total=list.reduce((a,t)=>a+(t.netPnl||0),0);
   const avg=total/n, maxL=Math.min(...list.map(t=>t.netPnl||0));
   const avgScore=list.reduce((a,t)=>a+(t.score||0),0)/n;
@@ -2597,7 +2622,7 @@ function renderStratFilter(baseList){
 }
 
 // ===== PNL CALENDAR =====
-const PLAT_DOT_COLORS={OKX:'#2563eb',BingX:'#059669',BingX2:'#d97706'};
+const PLAT_DOT_COLORS={OKX:'#2563eb',BingX:'#059669',BingX2:'#d97706',FTMO:'#7c3aed'};
 const MONTH_NAMES=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 function calNav(dir){
@@ -2767,6 +2792,12 @@ function setCalPlat(btn,p){
   btn.classList.add('on');
   const leg=document.getElementById('cal-page-legend');
   if(leg)leg.style.display=p==='all'?'flex':'none';
+  // Update calendar title to reflect selected platform
+  const title=document.querySelector('#cal-modal-overlay .cal-modal-title');
+  if(title){
+    const names={'all':'盈虧日曆','OKX':'OKX 盈虧日曆','BingX':'BingX 盈虧日曆','BingX2':'BingX (OP) 盈虧日曆','FTMO':'FTMO 盈虧日曆'};
+    title.textContent=names[p]||'盈虧日曆';
+  }
   renderCalPage();
 }
 function calPageNav(dir){calPageMonth+=dir;if(calPageMonth>11){calPageMonth=0;calPageYear++;}else if(calPageMonth<0){calPageMonth=11;calPageYear--;}renderCalPage();}
@@ -2790,7 +2821,7 @@ function renderRep(){
     document.getElementById('strat-filter-body').innerHTML='';
     return;
   }
-  const wins=list.filter(t=>t.netPnl>0).length;
+  const wins=list.filter(t=>isWin(t)).length;
   const total=list.reduce((a,t)=>a+(t.netPnl||0),0);
   const avg=total/n, maxL=Math.min(...list.map(t=>t.netPnl||0));
   const avgScore=list.reduce((a,t)=>a+(t.score||0),0)/n;
@@ -2820,9 +2851,10 @@ function renderRep(){
     OKX:   {pos:'rgba(37,99,235,.75)',  neg:'rgba(220,38,38,.6)'},
     BingX: {pos:'rgba(5,150,105,.75)',  neg:'rgba(220,38,38,.6)'},
     BingX2:{pos:'rgba(217,119,6,.75)',  neg:'rgba(220,38,38,.6)'},
+    FTMO:  {pos:'rgba(124,58,237,.75)', neg:'rgba(220,38,38,.6)'},
   };
   // Combine strat defs from relevant platforms
-  const activePlats=repPlat==='all'?['OKX','BingX']:[repPlat];
+  const activePlats=repPlat==='all'?['OKX','BingX','FTMO']:[repPlat];
   const allStratKeys=[]; const stratPlatMap={};
   activePlats.forEach(p=>{
     (STRAT_DEFS[p]||[]).forEach(s=>{
@@ -2839,7 +2871,7 @@ function renderRep(){
     ts.forEach(s=>{
       const lbl=activePlats.length>1?`[${p}] ${s}`:s;
       if(!sm[lbl])sm[lbl]={pnl:0,n:0,wins:0,plat:p};
-      sm[lbl].pnl+=t.netPnl||0;sm[lbl].n++;if(t.netPnl>0)sm[lbl].wins++;
+      sm[lbl].pnl+=t.netPnl||0;sm[lbl].n++;if(isWin(t))sm[lbl].wins++;
     });
   });
 
@@ -2927,7 +2959,7 @@ function renderWinRateAnalysis(list){
     if(!symMap[sym])symMap[sym]={n:0,wins:0,pnl:0};
     symMap[sym].n++;
     symMap[sym].pnl+=t.netPnl||0;
-    if((t.netPnl||0)>0)symMap[sym].wins++;
+    if(isWin(t))symMap[sym].wins++;
   });
   let symArr=Object.entries(symMap).map(([sym,d])=>({sym,n:d.n,wins:d.wins,pnl:parseFloat(d.pnl.toFixed(2)),wr:d.n?Math.round(d.wins/d.n*100):0}));
   if(wrSymSort==='wr') symArr.sort((a,b)=>b.wr-a.wr||b.n-a.n);
@@ -2945,7 +2977,7 @@ function renderWinRateAnalysis(list){
     const dow=new Date(t.date+'T12:00:00').getDay();
     dowMap[dow].n++;
     dowMap[dow].pnl+=t.netPnl||0;
-    if((t.netPnl||0)>0)dowMap[dow].wins++;
+    if(isWin(t))dowMap[dow].wins++;
   });
   const dowEl=document.getElementById('wr-dow-list');
   if(dowEl) dowEl.innerHTML=DOW.map((d,i)=>wrRow('星期'+d,dowMap[i].n,dowMap[i].wins,parseFloat(dowMap[i].pnl.toFixed(2)))).filter(Boolean).join('');
@@ -2969,7 +3001,7 @@ function renderWinRateAnalysis(list){
     if(!slot)return;
     slotMap[slot.label].n++;
     slotMap[slot.label].pnl+=t.netPnl||0;
-    if((t.netPnl||0)>0)slotMap[slot.label].wins++;
+    if(isWin(t))slotMap[slot.label].wins++;
   });
   const slotEl=document.getElementById('wr-slot-list');
   if(slotEl) slotEl.innerHTML=SLOTS.map(s=>wrRow(s.label,slotMap[s.label].n,slotMap[s.label].wins,parseFloat(slotMap[s.label].pnl.toFixed(2)))).filter(Boolean).join('');
@@ -2990,7 +3022,7 @@ function renderWinRateAnalysis(list){
     if(!em||!emoMap[em])return;
     emoMap[em].n++;
     emoMap[em].pnl+=t.netPnl||0;
-    if((t.netPnl||0)>0)emoMap[em].wins++;
+    if(isWin(t))emoMap[em].wins++;
   });
   const emoEl=document.getElementById('wr-emo-list');
   if(emoEl){
@@ -3014,7 +3046,7 @@ function renderWinRateAnalysis(list){
       if(!d||!dm[d])return;
       dm[d].n++;
       dm[d].pnl+=t.netPnl||0;
-      if((t.netPnl||0)>0){dm[d].wins++;dm[d].winPnls.push(t.netPnl);}
+      if(isWin(t)){dm[d].wins++;dm[d].winPnls.push(t.netPnl);}
       else{dm[d].lossPnls.push(t.netPnl||0);}
     });
     const totalN=closed.length;
@@ -3320,7 +3352,7 @@ function _exportNotionReportWithList(list){
   const tag=(txt,color,bg)=>`<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:${color};background:${bg}">${txt}</span>`;
   const today=new Date().toLocaleDateString('zh-TW');
   const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
-  const wins=list.filter(t=>(t.netPnl||0)>0).length;
+  const wins=list.filter(t=>isWin(t)).length;
   const wr=list.length?Math.round(wins/list.length*100):0;
   // 計算平均風報比 (1R=50U)
   const rrVals=list.map(t=>{
@@ -4686,7 +4718,7 @@ if(window._fbReady){
     const tag=(txt,c,bg)=>`<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;color:${c};background:${bg}">${txt}</span>`;
     const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const totalPnl=list.reduce((s,t)=>s+(t.netPnl||0),0);
-    const wins=list.filter(t=>(t.netPnl||0)>0).length;
+    const wins=list.filter(t=>isWin(t)).length;
     const wr=list.length?Math.round(wins/list.length*100):0;
 
     const rowsHtml=list.map((t,i)=>{
@@ -5438,9 +5470,8 @@ async function aiSubmitReview(){
 === 本次復盤交易 ===
 日期: ${t.date||'-'} | 時間: ${t.entryTime||'-'}
 幣種: ${t.symbol||t.sym||'-'} | 方向: ${t.direction||t.dir||'-'}
-進場價: ${t.entry||t.entryPrice||'-'} | 出場價: ${t.exit||t.exitPrice||'-'}
-止損(SL): ${t.sl||'-'} | 止盈 TP1: ${t.tp1||'-'}${t.tp2?` | TP2: ${t.tp2}`:''}${t.tp3?` | TP3: ${t.tp3}`:''}
-槓桿: ${t.lev||t.leverage||'-'}x | 保證金: ${t.margin||'-'}U
+進場價: ${t.entryPrice||'-'} | 出場價: ${t.exitPrice||'-'}
+槓桿: ${t.leverage||'-'}x | 手數: ${t.contracts||t.quantity||'-'}
 淨盈虧: ${pnlOf(t)>=0?'+':''}${pnlOf(t).toFixed(2)}U | 手續費: ${t.fees||t.fee||0}U
 情緒狀態: ${t.emotion||'-'}
 交易理由: ${t.reason||t.note||'-'}
@@ -5453,9 +5484,8 @@ async function aiSubmitReview(){
     structure:'市場結構分析',liquidity:'流動性位置識別',ict:'ICT 交易模型應用'
   }[f]||f)).join('、')}`:''
 
-  const systemPrompt=`你是一位融合多種專業交易方法的加密貨幣交易複盤師，精通以下三大框架並能交叉運用：
+  const systemPrompt=`你是一位精通 ICT（Inner Circle Trader）交易方法的專業加密貨幣交易複盤師。你深度理解以下 ICT 概念並能從圖表和交易數據中識別它們：
 
-═══ SMC / ICT 框架 ═══
 **市場結構**
 - Market Structure Shift (MSS) / Break of Structure (BOS)
 - Higher High/Low (HH/HL) 多頭結構 vs Lower High/Low (LH/LL) 空頭結構
@@ -5471,57 +5501,28 @@ async function aiSubmitReview(){
 - Order Block (OB) — 最後一根反向K棒前的蠟燭
 - Breaker Block — 被突破的 OB 轉為反向支撐/阻力
 - Fair Value Gap (FVG) / Imbalance — 三K棒模式的價格缺口
-- Mitigation Block / Rejection Block
+- Mitigation Block
+- Rejection Block
+
+**時間與概念**
 - Power of 3 (AMD) — Accumulation, Manipulation, Distribution
 - Kill Zones — London Open (2:00-5:00 UTC), New York Open (12:30-15:30 UTC)
-- IPDA Data Ranges — 20/40/60日高低
-- Premium & Discount Array — Fibonacci 50% 劃分溢價/折扣區
-- Optimal Trade Entry (OTE) — 0.618-0.786 Fib 回調
-
-═══ TPO / 市場剖析框架 ═══
-- TPO Chart（Time Price Opportunity）— 每個字母代表30分鐘價格出現的時間段
-- Point of Control (POC) — 成交量/時間最集中的價格，最強磁吸力
-- Value Area High/Low (VAH/VAL) — 70% 成交量集中區間，重要支撐阻力
-- Value Area (VA) — 市場認為「公平」的價格範圍
-- Initial Balance (IB) — 開盤前兩個TPO的高低點，當日波動參考
-- Single Prints — 單一字母區域，代表快速移動留下的真空帶，易被回補
-- Poor High/Low — 收盤時未被充分探索的高低點，次日易被重訪
-- Naked POC (nPOC) — 尚未被價格回訪的歷史POC，強力磁吸點
-- 多日TPO重疊分析 — 辨識跨日的Value Area接受/拒絕行為
-
-═══ 拍賣理論（Auction Market Theory）框架 ═══
-- 市場本質是雙向拍賣：買方出價 vs 賣方要價，價格由此動態平衡
-- **接受（Acceptance）** — 價格在某區間停留，雙方認為公平，市場橫盤整理
-- **拒絕（Rejection）** — 價格快速離開某區域，表示單邊無法成交，反彈信號
-- **價格發現（Price Discovery）** — 市場離開均衡向上/下尋找新買家/賣家
-- **均衡回歸** — 價格偏離後回到POC/VA的自然傾向
-- **流動性驅動** — 價格移動是為了找到能成交的對手方
-- **成交量不平衡** — Low Volume Node (LVN) 價格快速穿越；High Volume Node (HVN) 價格在此整理
-- **輪廓形態識別**：
-  - 正態分佈（P形/b形）— 趨勢後整理，P=多頭整理，b=空頭整理
-  - 雙峰分佈 — 市場結構轉換中，兩個均衡區對抗
-  - 複合輪廓 — 多日拍賣合併，識別更大框架的接受區
-
-═══ 三框架整合應用 ═══
-- **TPO的POC/VA + ICT的OB/FVG** → 雙重確認的高勝率區域
-- **拍賣理論的拒絕 + ICT的Liquidity Sweep** → 確認真實的流動性獵取
-- **TPO的Single Prints + ICT的Liquidity Void** → 同一現象的兩種視角，快速缺口易被回補
-- **Value Area拒絕 + OB進場** → 在「公平價值」邊緣找SMC結構進場
-- **nPOC磁吸 + ICT的Draw on Liquidity** → 預測價格的下一個目標
+- IPDA (Interbank Price Delivery Algorithm) Data Ranges — 20/40/60日高低
+- Premium & Discount Array — 利用 Fibonacci 50% 劃分溢價/折扣區
+- Optimal Trade Entry (OTE) — 0.618-0.786 Fib 回調進場區
+- Daily/Weekly/Monthly Bias
 
 **風險管理**
 - 建議 R:R 至少 1:2 以上
-- Stop Loss 應置於結構之外（OB下方/SSL上方/VAL外側）
-- 利用TPO的IB判斷當日波動預期
+- Stop Loss 應置於結構之外（OB下方/SSL上方）
 
 **復盤規則**：
-1. 優先從圖表截圖分析市場結構、TPO輪廓和關鍵位
-2. 結合三框架交叉驗證進出場的合理性
+1. 優先從圖表截圖分析市場結構和關鍵位
+2. 結合交易數據判斷進出場是否符合 ICT 原則
 3. 明確指出做得好的地方和需要改進的地方
 4. 給出具體、可執行的改進建議
 5. 使用繁體中文回答，專業術語可保留英文縮寫
 6. 回答結構化：先總結評分，再分析，最後給建議
-7. 若截圖包含TPO或Volume Profile，優先解讀POC/VA的位置意義
 
 ${buildTradeContext()}
 ${tradeDetail}`;
@@ -5568,7 +5569,7 @@ ${tradeDetail}`;
     const headers={'Content-Type':'application/json'};
     if(workerUrl){headers['x-worker-auth']=key;}
     else{headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';headers['anthropic-dangerous-direct-browser-calls']='true';}
-    const body={model:'claude-haiku-4-5-20251001',max_tokens:4000,system:systemPrompt,
+    const body={model:'claude-haiku-4-5-20251001',max_tokens:1200,system:systemPrompt,
       messages:[{role:'user',content:contentParts}]};
     if(workerUrl)body['x-claude-key']=key;
 
